@@ -1,14 +1,26 @@
 {
   "name": "ezcat",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "expo-router/entry",
   "dependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
     "expo": "~56.0.12",
+    "expo-constants": "*",
+    "expo-font": "^56.0.7",
+    "expo-linking": "*",
+    "expo-router": "*",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.3",
-    "react-native": "0.85.3"
+    "react-dom": "^19.2.3",
+    "react-native": "0.85.3",
+    "react-native-gesture-handler": "*",
+    "react-native-reanimated": "*",
+    "react-native-safe-area-context": "*",
+    "react-native-screens": "*",
+    "react-native-web": "^0.21.2"
   },
   "devDependencies": {
+    "@expo/cli": "^56.1.16",
     "@types/react": "~19.2.2",
     "typescript": "~6.0.3"
   },
