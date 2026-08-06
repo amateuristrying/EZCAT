@@ -15,44 +15,8 @@ import { router } from 'expo-router';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Colors } from '../constants/colors';
 import { FontFamily, Typography } from '../constants/typography';
-
-// ─── Constants & Metadata ───────────────────────────────────────────────────
-
-interface College {
-  id: string;
-  part1: string;
-  part2: string;
-}
-
-const COLLEGES: College[] = [
-  { id: 'iim_ahmedabad', part1: 'IIM', part2: 'Ahmedabad' },
-  { id: 'iim_bangalore', part1: 'IIM', part2: 'Bangalore' },
-  { id: 'iim_calcutta', part1: 'IIM', part2: 'Calcutta' },
-  { id: 'iim_lucknow', part1: 'IIM', part2: 'Lucknow' },
-  { id: 'iim_kozhikode', part1: 'IIM', part2: 'Kozhikode' },
-  { id: 'iim_indore', part1: 'IIM', part2: 'Indore' },
-  { id: 'fms_delhi', part1: 'FMS', part2: 'Delhi' },
-  { id: 'spjimr_mumbai', part1: 'SPJIMR', part2: 'Mumbai' },
-  { id: 'xlri_jamshedpur', part1: 'XLRI', part2: 'Jamshedpur' },
-  { id: 'mdi_gurgaon', part1: 'MDI', part2: 'Gurgaon' },
-  { id: 'jbims_mumbai', part1: 'JBIMS', part2: 'Mumbai' },
-  { id: 'isb_hyderabad', part1: 'ISB', part2: 'Hyderabad' },
-];
-
-const COLLEGE_METADATA: Record<string, { initials: string; color: string }> = {
-  iim_ahmedabad: { initials: 'A', color: '#0B2C74' },
-  iim_bangalore: { initials: 'B', color: '#0D7F3B' },
-  iim_calcutta: { initials: 'C', color: '#8B261D' },
-  iim_lucknow: { initials: 'L', color: '#1E5A34' },
-  iim_kozhikode: { initials: 'K', color: '#0D47A1' },
-  iim_indore: { initials: 'I', color: '#4A148C' },
-  fms_delhi: { initials: 'FMS', color: '#B71C1C' },
-  spjimr_mumbai: { initials: 'SPJ', color: '#E65100' },
-  xlri_jamshedpur: { initials: 'XLR', color: '#0D3C61' },
-  mdi_gurgaon: { initials: 'MDI', color: '#006064' },
-  jbims_mumbai: { initials: 'JBI', color: '#212121' },
-  isb_hyderabad: { initials: 'ISB', color: '#01579B' },
-};
+import { useAppStore } from '../store/AppStore';
+import { COLLEGES, COLLEGE_METADATA } from '../constants/data';
 
 // ─── College Logo Placeholder ───────────────────────────────────────────────
 
@@ -112,7 +76,10 @@ export default function CollegesScreen() {
   const { width } = useWindowDimensions();
   const logoSize = Math.min(width * 0.52, 210);
 
-  const [selectedColleges, setSelectedColleges] = useState<string[]>(['iim_ahmedabad']);
+  const { colleges, setColleges } = useAppStore();
+  const [selectedColleges, setSelectedColleges] = useState<string[]>(
+    colleges.length ? colleges : ['iim_ahmedabad'],
+  );
   const [searchQuery, setSearchQuery] = useState('');
 
   const handleBack = useCallback(() => {
@@ -120,9 +87,9 @@ export default function CollegesScreen() {
   }, []);
 
   const handleContinue = useCallback(() => {
-    // Navigate to next onboarding step or complete onboarding flow
-    console.log('Selected colleges:', selectedColleges);
-  }, [selectedColleges]);
+    setColleges(selectedColleges);
+    router.push('/onboarding/level');
+  }, [selectedColleges, setColleges]);
 
   const toggleCollege = useCallback((id: string) => {
     setSelectedColleges((prev) => {

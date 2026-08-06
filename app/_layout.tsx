@@ -12,6 +12,7 @@ import {
 } from '@expo-google-fonts/inter';
 import { MobileFrame } from '../src/components/MobileFrame';
 import { Colors } from '../src/constants/colors';
+import { AppStoreProvider } from '../src/store/AppStore';
 
 /**
  * RootLayout — App entry point.
@@ -42,14 +43,19 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <MobileFrame>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="onboarding/profile" />
-          <Stack.Screen name="onboarding/goals" />
-          <Stack.Screen name="onboarding/colleges" />
-        </Stack>
-      </MobileFrame>
+      <AppStoreProvider>
+        <MobileFrame>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="onboarding/profile" />
+            <Stack.Screen name="onboarding/goals" />
+            <Stack.Screen name="onboarding/colleges" />
+            <Stack.Screen name="onboarding/level" />
+            <Stack.Screen name="onboarding/ready" />
+            <Stack.Screen name="home" />
+          </Stack>
+        </MobileFrame>
+      </AppStoreProvider>
     </SafeAreaProvider>
   );
 }

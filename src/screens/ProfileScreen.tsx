@@ -19,6 +19,7 @@ import { PrimaryButton } from '../components/PrimaryButton';
 import { FormInputCard } from '../components/FormInputCard';
 import { Colors } from '../constants/colors';
 import { FontFamily, Typography } from '../constants/typography';
+import { useAppStore } from '../store/AppStore';
 
 // ─── Graduation year options ───────────────────────────────────────────────
 const CURRENT_YEAR = new Date().getFullYear();
@@ -151,17 +152,18 @@ export default function ProfileScreen() {
   const { width } = useWindowDimensions();
   const logoSize = Math.min(width * 0.52, 210);
 
-  const [name, setName] = useState('');
-  const [age, setAge] = useState('');
-  const [gradYear, setGradYear] = useState('');
+  const { profile, setProfile } = useAppStore();
+  const [name, setName] = useState(profile.name);
+  const [age, setAge] = useState(profile.age);
+  const [gradYear, setGradYear] = useState(profile.gradYear);
   const [gradPickerOpen, setGradPickerOpen] = useState(false);
 
   const ageInputRef = useRef<TextInput>(null);
 
   const handleContinue = useCallback(() => {
-    // TODO: validate and navigate to next onboarding screen
+    setProfile({ name, age, gradYear });
     router.push('/onboarding/goals');
-  }, []);
+  }, [name, age, gradYear, setProfile]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>

@@ -16,22 +16,12 @@ import { router } from 'expo-router';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Colors } from '../constants/colors';
 import { FontFamily, Typography } from '../constants/typography';
-
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-/** Percentile steps shown on the slider */
-const PERCENTILE_STEPS = ['80+', '85+', '90+', '95+', '99+', '99.5+', '99.9+'];
-
-/** Default selected step index (95+ = index 3) */
-const DEFAULT_PERCENTILE_INDEX = 3;
-
-/** CAT year / mode options */
-const YEAR_OPTIONS = [
-  { id: 'cat2026', label: 'CAT 2026', icon: '📅' },
-  { id: 'cat2027', label: 'CAT 2027', icon: '📅' },
-  { id: 'cat2028', label: 'CAT 2028', icon: '📅' },
-  { id: 'exploring', label: 'Just\nExploring', icon: '🧭' },
-] as const;
+import { useAppStore } from '../store/AppStore';
+import {
+  PERCENTILE_STEPS,
+  DEFAULT_PERCENTILE_INDEX,
+  YEAR_OPTIONS,
+} from '../constants/data';
 
 // ─── Year Option Card ────────────────────────────────────────────────────────
 
@@ -307,12 +297,18 @@ export default function GoalsScreen() {
   const { width } = useWindowDimensions();
   const logoSize = Math.min(width * 0.52, 210);
 
-  const [selectedYear, setSelectedYear] = useState<string>('cat2026');
-  const [percentileIndex, setPercentileIndex] = useState(DEFAULT_PERCENTILE_INDEX);
+  const { targetYear, percentile, setTargetYear, setPercentile } = useAppStore();
+  const [selectedYear, setSelectedYear] = useState<string>(targetYear);
+  const [percentileIndex, setPercentileIndex] = useState(() => {
+    const idx = PERCENTILE_STEPS.indexOf(percentile);
+    return idx >= 0 ? idx : DEFAULT_PERCENTILE_INDEX;
+  });
 
   const handleContinue = useCallback(() => {
+    setTargetYear(selectedYear);
+    setPercentile(PERCENTILE_STEPS[percentileIndex]);
     router.push('/onboarding/colleges');
-  }, []);
+  }, [selectedYear, percentileIndex, setTargetYear, setPercentile]);
 
   const handleBack = useCallback(() => {
     router.back();
