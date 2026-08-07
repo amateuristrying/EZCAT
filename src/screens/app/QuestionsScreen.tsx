@@ -24,7 +24,7 @@ const SECTION_LABEL: Record<SectionId, string> = { qa: 'QA', dilr: 'DILR', varc:
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 export default function QuestionsScreen() {
-  const { answers, answerQuestion, progress } = useAppStore();
+  const { answers, answerQuestion, progress, setActiveTab } = useAppStore();
 
   const [activeSection, setActiveSection] = useState<SectionId>('qa');
   const [indexBySection, setIndexBySection] = useState<Record<SectionId, number>>({
@@ -35,18 +35,22 @@ export default function QuestionsScreen() {
   const [pending, setPending] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [hintShown, setHintShown] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const sectionQuestions = SAMPLE_QUESTIONS.filter((q) => q.section === activeSection);
-  const currentIndex = Math.min(indexBySection[activeSection], sectionQuestions.length - 1);
+  const rawIdx = indexBySection[activeSection] || 0;
+  const currentIndex = Math.max(0, Math.min(rawIdx, sectionQuestions.length - 1));
   const q = sectionQuestions[currentIndex];
 
   // Sync selection/reveal state whenever the current question changes.
   useEffect(() => {
+    if (!q) return;
     const recorded = answers[q.id];
     setPending(recorded ?? null);
     setRevealed(recorded != null);
     setHintShown(false);
-  }, [q.id, answers]);
+    setNotice(null);
+  }, [q?.id, answers]);
 
   const selectOption = (key: string) => {
     if (revealed) return;
@@ -79,7 +83,12 @@ export default function QuestionsScreen() {
       {/* ─── Header ───────────────────────────────────────────── */}
       <View style={styles.headerRow}>
         <Text style={styles.title}>Questions</Text>
-        <Pressable style={styles.endBtn} accessibilityRole="button" accessibilityLabel="End Session">
+        <Pressable
+          style={styles.endBtn}
+          onPress={() => setActiveTab('home')}
+          accessibilityRole="button"
+          accessibilityLabel="End Session"
+        >
           <Text style={styles.endIcon}>⏻</Text>
           <Text style={styles.endText}>End Session</Text>
         </Pressable>
@@ -202,14 +211,31 @@ export default function QuestionsScreen() {
             <Text style={styles.hintText}>💡 {q.hint}</Text>
           </View>
         )}
+        {/* Notice Banner */}
+        {notice && (
+          <View style={[styles.result, { backgroundColor: Colors.purpleBg, marginTop: 12 }]}>
+            <Text style={[styles.resultText, { color: Colors.purple }]}>{notice}</Text>
+          </View>
+        )}
       </Card>
 
       {/* ─── Actions ──────────────────────────────────────────── */}
       <Card style={styles.actionsCard}>
         <Action icon="💡" label="Hint" onPress={() => setHintShown((v) => !v)} />
-        <Action icon="💬" label="Ask AI" />
-        <Action icon="⚠️" label="Report" />
-        <Action icon="↻" label="Similar" />
+        <Action icon="💬" label="Ask AI" onPress={() => setActiveTab('coach')} />
+        <Action
+          icon="⚠️"
+          label="Report"
+          onPress={() => setNotice('Thank you! Question reported for review.')}
+        />
+        <Action
+          icon="↻"
+          label="Similar"
+          onPress={() => {
+            setNotice('Loading a similar concept question...');
+            handlePrimary();
+          }}
+        />
       </Card>
 
       {/* ─── Primary CTA ──────────────────────────────────────── */}

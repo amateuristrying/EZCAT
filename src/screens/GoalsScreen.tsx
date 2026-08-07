@@ -118,6 +118,7 @@ interface StepSliderProps {
 
 function StepSlider({ steps, selectedIndex, onChangeIndex }: StepSliderProps) {
   const trackWidth = useRef(0);
+  const startXRef = useRef(0);
 
   /** Map a touch X position to the nearest step index */
   const xToIndex = (x: number): number => {
@@ -131,11 +132,14 @@ function StepSlider({ steps, selectedIndex, onChangeIndex }: StepSliderProps) {
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (evt) => {
-        const idx = xToIndex(evt.nativeEvent.locationX);
+        const startX = evt.nativeEvent.locationX;
+        startXRef.current = startX;
+        const idx = xToIndex(startX);
         onChangeIndex(idx);
       },
-      onPanResponderMove: (evt) => {
-        const idx = xToIndex(evt.nativeEvent.locationX);
+      onPanResponderMove: (_, gestureState) => {
+        const currentX = startXRef.current + gestureState.dx;
+        const idx = xToIndex(currentX);
         onChangeIndex(idx);
       },
     }),

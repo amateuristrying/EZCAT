@@ -8,7 +8,9 @@
     "userInterfaceStyle": "light",
     "scheme": "ezcat",
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-font",
+      "expo-status-bar"
     ],
     "splash": {
       "backgroundColor": "#FFFFFF"

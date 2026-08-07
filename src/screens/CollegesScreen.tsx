@@ -9,6 +9,7 @@ import {
   Platform,
   useWindowDimensions,
   TextInput,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -81,6 +82,8 @@ export default function CollegesScreen() {
     colleges.length ? colleges : ['iim_ahmedabad'],
   );
   const [searchQuery, setSearchQuery] = useState('');
+  const [customModalOpen, setCustomModalOpen] = useState(false);
+  const [customName, setCustomName] = useState('');
 
   const handleBack = useCallback(() => {
     router.back();
@@ -100,6 +103,19 @@ export default function CollegesScreen() {
       }
     });
   }, []);
+
+  const handleAddCustomCollege = useCallback(() => {
+    if (!customName.trim()) return;
+    const customId = `custom_${Date.now()}`;
+    const nameParts = customName.trim().split(' ');
+    const part1 = nameParts[0] || 'Custom';
+    const part2 = nameParts.slice(1).join(' ') || 'College';
+    COLLEGES.push({ id: customId, part1, part2 });
+    COLLEGE_METADATA[customId] = { initials: part1.slice(0, 3).toUpperCase(), color: '#0B2C74' };
+    setSelectedColleges((prev) => [...prev, customId]);
+    setCustomName('');
+    setCustomModalOpen(false);
+  }, [customName]);
 
   // Filter colleges based on search query
   const filteredColleges = COLLEGES.filter((college) => {
@@ -223,6 +239,7 @@ export default function CollegesScreen() {
 
         {/* ─── "My college isn't listed" Card ──────────────────── */}
         <Pressable
+          onPress={() => setCustomModalOpen(true)}
           style={({ pressed }) => [
             styles.notListedCard,
             pressed && styles.notListedCardPressed,
@@ -260,6 +277,33 @@ export default function CollegesScreen() {
         />
         <Text style={styles.footer}>Developed by 99VCA</Text>
       </View>
+
+      {/* ─── Custom College Modal ────────────────────────────── */}
+      <Modal
+        visible={customModalOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setCustomModalOpen(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setCustomModalOpen(false)} />
+        <View style={styles.modalSheet}>
+          <View style={styles.modalHandle} />
+          <Text style={styles.modalTitle}>Add Custom College</Text>
+          <TextInput
+            style={styles.modalInput}
+            value={customName}
+            onChangeText={setCustomName}
+            placeholder="e.g. FMS BHU, IIT Delhi DMS"
+            placeholderTextColor={Colors.placeholder}
+            autoFocus
+          />
+          <PrimaryButton
+            label="Add College"
+            onPress={handleAddCustomCollege}
+            style={{ width: '100%', marginTop: 12 }}
+          />
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -580,5 +624,43 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     textAlign: 'center',
     letterSpacing: 0.1,
+  },
+
+  // ── Modal Styles ──────────────────────────────────────────
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  modalSheet: {
+    backgroundColor: Colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+    alignItems: 'center',
+    gap: 16,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    marginBottom: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: FontFamily.bold,
+    color: Colors.primary,
+  },
+  modalInput: {
+    width: '100%',
+    height: 50,
+    borderRadius: 14,
+    borderWidth: 1.2,
+    borderColor: Colors.border,
+    paddingHorizontal: 16,
+    fontSize: 15,
+    fontFamily: FontFamily.regular,
+    color: Colors.textBody,
   },
 });

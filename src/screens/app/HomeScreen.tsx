@@ -43,7 +43,14 @@ export default function HomeScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { profile, targetYear, percentile, progress, setActiveTab, reset } = useAppStore();
 
-  const firstName = profile.name.trim().split(' ')[0] || 'Abhi';
+  const nameParts = profile.name.trim().split(/\s+/).filter(Boolean);
+  const initials =
+    nameParts.length >= 2
+      ? (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase()
+      : nameParts.length === 1
+      ? nameParts[0].slice(0, 2).toUpperCase()
+      : 'EZ';
+  const firstName = nameParts[0] || 'Aspirant';
   const daysLeft = daysLeftForYear(targetYear);
   const yearLabel = catYearLabel(targetYear);
 
@@ -93,7 +100,7 @@ export default function HomeScreen() {
             accessibilityRole="button"
             accessibilityLabel="Account menu"
           >
-            <Text style={styles.avatarText}>AR</Text>
+            <Text style={styles.avatarText}>{initials}</Text>
           </Pressable>
         </View>
       </View>

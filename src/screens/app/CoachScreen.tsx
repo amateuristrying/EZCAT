@@ -10,6 +10,7 @@ import { Colors } from '../../constants/colors';
 import { FontFamily } from '../../constants/typography';
 import { Card, IconBadge } from '../../components/AppUI';
 import { ProgressRing, Sparkline } from '../../components/Charts';
+import { useAppStore } from '../../store/AppStore';
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -72,6 +73,9 @@ const WEEK = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 export default function CoachScreen() {
+  const { profile } = useAppStore();
+  const firstName = profile.name.trim().split(/\s+/)[0] || 'Aspirant';
+
   return (
     <ScrollView
       style={styles.flex}
@@ -96,7 +100,7 @@ export default function CoachScreen() {
           <Text style={{ fontSize: 26 }}>🤖</Text>
         </View>
         <View style={styles.flex}>
-          <Text style={styles.coachGreeting}>Good morning, Abhi! 👋</Text>
+          <Text style={styles.coachGreeting}>Good morning, {firstName}! 👋</Text>
           <Text style={styles.coachText}>
             I've analyzed your performance and created a plan to help you reach 99+ percentile.
           </Text>
