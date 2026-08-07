@@ -43,3 +43,5 @@ yarn-error.*
 #agent and internal files
 .claude/
 .agents/
+practice_questions/
+previous_papers/
