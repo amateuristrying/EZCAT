@@ -25,10 +25,14 @@ Thank you for your interest in contributing to **EZCAT**! We welcome contributio
 
 ## 🤝 Code of Conduct & Community Expectations
 
-EZCAT is an open-source project built with respect, collaboration, and learning in mind. We ask all contributors to:
+EZCAT is an open-source project built with respect, collaboration, and learning in mind. All contributors, maintainers, and participants are expected to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+We ask all contributors to:
 - Be respectful, constructive, and encouraging in all communications, code reviews, and issue discussions.
 - Focus on what is best for the community and for students preparing for competitive exams.
 - Accept constructive feedback gracefully and work collaboratively toward solutions.
+
+For details on acceptable behavior, enforcement policies, and reporting procedures, please review our full [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ---
 
