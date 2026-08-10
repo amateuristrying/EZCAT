@@ -1,0 +1,51 @@
+name: Feature Request
+description: Suggest an idea or feature enhancement for EZCAT
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a feature for EZCAT! Please describe the problem you want solved and your proposed solution.
+
+  - type: textarea
+    id: problem-motivation
+    attributes:
+      label: Problem & Motivation
+      description: Is your feature request related to a problem or user friction? Please describe clearly.
+      placeholder: I'm always frustrated when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: A clear and concise description of what you want to happen.
+      placeholder: I would like the app to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives-considered
+    attributes:
+      label: Alternatives Considered
+      description: A clear and concise description of any alternative solutions or features you've considered.
+      placeholder: I also thought about...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: app-area
+    attributes:
+      label: Which part of the app does this touch?
+      description: Select all areas of the project that would be affected by this feature.
+      options:
+        - label: App Navigation & Screens (Home, Mocks, Questions UI)
+        - label: Exam & Quiz Solver Engine (Timer, MCQ/TITA, Marking)
+        - label: Analytics & Local Storage (Progress, Streaks, Attempts)
+        - label: AI Exam Coach
+        - label: Database & Backend Data Pipeline (SQLite / Python scripts)
+        - label: Documentation / Developer Experience
+    validations:
+      required: false

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Contribution Guidelines & Discussions
+    url: https://github.com/amateuristrying/EZCAT/blob/main/CONTRIBUTING.md
+    about: For general questions, contribution ideas, or tasks that do not fit the issue templates above, please refer to CONTRIBUTING.md.

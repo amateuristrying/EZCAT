@@ -128,9 +128,7 @@ EZCAT/
 
 ## 🤝 Contributing
 
-Contributions are welcome. Fork the repo, create a feature branch, and open a pull
-request — for larger changes, opening an issue first to discuss the approach helps
-avoid wasted work.
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) to learn about our development setup, issue templates, git workflow, and pull request process.
 
 ## 📄 License
 

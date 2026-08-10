@@ -1,0 +1,53 @@
+name: Content & Data Issue
+description: Report an incorrect answer key, mis-parsed question, duplicate, or formatting error in exam questions
+title: "[Content]: "
+labels: ["content-issue", "data-quality"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        EZCAT ships authentic CAT exam questions and answer keys. If you notice a question with a wrong answer key, mis-parsed text, duplicate entry, or typo, please let us know!
+
+  - type: input
+    id: question-identifier
+    attributes:
+      label: Question Identifier / Paper Details
+      description: Specify the Section (VARC/DILR/QA), Year, Paper/Slot, or Question ID if visible.
+      placeholder: e.g., CAT 2022 Slot 1 - QA Question #14, or Question ID q_varc_2020_s2_04
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue Type
+      description: What kind of content issue are you reporting?
+      options:
+        - Wrong Answer Key
+        - Mis-parsed Question / Missing Options
+        - Duplicate Question
+        - Typo / Formatting Error
+        - Incorrect Explanation / Solution
+        - Other Content Issue
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue-description
+    attributes:
+      label: Description of Error & Expected Correction
+      description: Explain what is wrong with the question content and provide the correct answer or fix if known.
+      placeholder: |
+        Current Answer Key in app: Option B
+        Correct Answer: Option C because...
+    validations:
+      required: true
+
+  - type: textarea
+    id: source-reference
+    attributes:
+      label: Verification Source / Reference (Optional)
+      description: Links to official CAT answer key, official paper pdf, or explanation reference.
+      placeholder: e.g., Link to official answer key or paper PDF...
+    validations:
+      required: false
