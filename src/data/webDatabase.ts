@@ -85,6 +85,19 @@ export class WebQuestionRepository implements IQuestionRepository {
       totalQuestions: matching.length,
     };
   }
+
+  async getTITAQuestion(section?: SectionType): Promise<Question | null> {
+    const matching = this.questions.filter((q) => {
+      const isTITA = !q.options || q.options.length === 0;
+      if (!isTITA) return false;
+      if (section && q.section !== section) return false;
+      return true;
+    });
+
+    if (matching.length === 0) return null;
+    const picked = matching[Math.floor(Math.random() * matching.length)];
+    return mapToQuestion(picked);
+  }
 }
 
 export const webQuestionRepository = new WebQuestionRepository();

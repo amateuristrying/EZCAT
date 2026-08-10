@@ -119,6 +119,24 @@ export class NativeQuestionRepository implements IQuestionRepository {
       totalQuestions: rows.length,
     };
   }
+
+  async getTITAQuestion(section?: SectionType): Promise<Question | null> {
+    const db = await getDatabase();
+    let rows: any[] = [];
+    if (section) {
+      rows = await db.getAllAsync(
+        'SELECT * FROM questions WHERE section = ? AND json_array_length(options) = 0 ORDER BY RANDOM() LIMIT 1',
+        [section]
+      );
+    } else {
+      rows = await db.getAllAsync(
+        'SELECT * FROM questions WHERE json_array_length(options) = 0 ORDER BY RANDOM() LIMIT 1'
+      );
+    }
+
+    if (rows.length === 0) return null;
+    return mapRowToQuestion(rows[0]);
+  }
 }
 
 export const nativeQuestionRepository = new NativeQuestionRepository();

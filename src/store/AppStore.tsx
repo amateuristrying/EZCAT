@@ -5,6 +5,9 @@ import {
   PERCENTILE_STEPS,
   type SectionId,
 } from '../constants/data';
+import { getDailyPracticeSet, getTITAQuestion } from '../data/questionRepository';
+import { UIQuestion, mapRepoQuestionToUIQuestion } from '../data/adapter';
+import { DailySetCounts } from '../data/types';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -32,7 +35,9 @@ interface AppStore {
 
   // Runtime
   activeTab: TabKey;
-  answers: Record<string, string>; // questionId → selected option key
+  answers: Record<string, string>; // questionId → selected option key or TITA input
+  dailyQuestions: UIQuestion[];
+  isQuestionsLoading: boolean;
 
   // Derived
   progress: {
@@ -41,27 +46,28 @@ interface AppStore {
     bySection: Record<SectionId, SectionProgress>;
   };
 
-  // Setters
+  // Setters & Actions
   setProfile: (p: Partial<Profile>) => void;
   setTargetYear: (id: string) => void;
   setPercentile: (p: string) => void;
   setColleges: (ids: string[]) => void;
   setLevel: (section: SectionId, level: Level) => void;
   setActiveTab: (tab: TabKey) => void;
-  answerQuestion: (questionId: string, optionKey: string) => void;
+  answerQuestion: (questionId: string, optionKeyOrText: string) => void;
+  loadDailyPracticeSet: (counts?: DailySetCounts) => Promise<UIQuestion[]>;
   reset: () => void;
 }
 
 const AppStoreContext = createContext<AppStore | null>(null);
 
 // ─── Defaults ────────────────────────────────────────────────────────────────
-// Sensible demo defaults so /home looks complete even before onboarding.
 
 const DEFAULT_PROFILE: Profile = { name: '', age: '', gradYear: '' };
 const DEFAULT_TARGET_YEAR = 'cat2027';
 const DEFAULT_PERCENTILE = PERCENTILE_STEPS[DEFAULT_PERCENTILE_INDEX];
 const DEFAULT_COLLEGES = ['iim_bangalore'];
 const DEFAULT_LEVELS: Record<SectionId, Level | null> = { varc: null, dilr: null, qa: null };
+const DEFAULT_DAILY_COUNTS: DailySetCounts = { VARC: 2, DILR: 2, QA: 3 };
 
 // ─── Provider ────────────────────────────────────────────────────────────────
 
@@ -73,6 +79,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [levels, setLevels] = useState<Record<SectionId, Level | null>>(DEFAULT_LEVELS);
   const [activeTab, setActiveTab] = useState<TabKey>('home');
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [dailyQuestions, setDailyQuestions] = useState<UIQuestion[]>([]);
+  const [isQuestionsLoading, setIsQuestionsLoading] = useState(false);
 
   const setProfile = useCallback((p: Partial<Profile>) => {
     setProfileState((prev) => ({ ...prev, ...p }));
@@ -82,8 +90,39 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setLevels((prev) => ({ ...prev, [section]: level }));
   }, []);
 
-  const answerQuestion = useCallback((questionId: string, optionKey: string) => {
-    setAnswers((prev) => ({ ...prev, [questionId]: optionKey }));
+  const answerQuestion = useCallback((questionId: string, optionKeyOrText: string) => {
+    setAnswers((prev) => ({ ...prev, [questionId]: optionKeyOrText }));
+  }, []);
+
+  const loadDailyPracticeSet = useCallback(async (counts: DailySetCounts = DEFAULT_DAILY_COUNTS): Promise<UIQuestion[]> => {
+    setIsQuestionsLoading(true);
+    try {
+      const repoQuestions = await getDailyPracticeSet(counts);
+      let mapped = repoQuestions.map(mapRepoQuestionToUIQuestion);
+
+      // Ensure TITA representation in the daily practice set
+      const hasTITA = mapped.some((q) => q.isTITA);
+      if (!hasTITA) {
+        const titaMatch = await getTITAQuestion('QA');
+        if (titaMatch) {
+          const titaUI = mapRepoQuestionToUIQuestion(titaMatch);
+          const firstQAIdx = mapped.findIndex((q) => q.section === 'qa');
+          if (firstQAIdx !== -1) {
+            mapped[firstQAIdx] = titaUI;
+          } else {
+            mapped.unshift(titaUI);
+          }
+        }
+      }
+
+      setDailyQuestions(mapped);
+      setIsQuestionsLoading(false);
+      return mapped;
+    } catch (err) {
+      console.error('Failed to load daily practice set from repository:', err);
+      setIsQuestionsLoading(false);
+      return [];
+    }
   }, []);
 
   const reset = useCallback(() => {
@@ -94,9 +133,11 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setLevels(DEFAULT_LEVELS);
     setActiveTab('home');
     setAnswers({});
+    setDailyQuestions([]);
   }, []);
 
-  // Derived progress from the question bank + answers.
+  // Derived progress calculated dynamically from loaded dailyQuestions
+  // (falls back to SAMPLE_QUESTIONS if dailyQuestions is empty)
   const progress = useMemo(() => {
     const bySection: Record<SectionId, SectionProgress> = {
       varc: { total: 0, answered: 0 },
@@ -105,16 +146,24 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     };
     let total = 0;
     let answered = 0;
-    for (const q of SAMPLE_QUESTIONS) {
-      bySection[q.section].total += 1;
-      total += 1;
-      if (answers[q.id] != null) {
-        bySection[q.section].answered += 1;
-        answered += 1;
+
+    const questionsToUse = dailyQuestions.length > 0
+      ? dailyQuestions
+      : SAMPLE_QUESTIONS.map((q) => ({ id: q.id, section: q.section }));
+
+    for (const q of questionsToUse) {
+      const sec = q.section as SectionId;
+      if (bySection[sec]) {
+        bySection[sec].total += 1;
+        total += 1;
+        if (answers[q.id] != null) {
+          bySection[sec].answered += 1;
+          answered += 1;
+        }
       }
     }
     return { total, answered, bySection };
-  }, [answers]);
+  }, [dailyQuestions, answers]);
 
   const value = useMemo<AppStore>(
     () => ({
@@ -125,6 +174,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       levels,
       activeTab,
       answers,
+      dailyQuestions,
+      isQuestionsLoading,
       progress,
       setProfile,
       setTargetYear,
@@ -133,6 +184,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       setLevel,
       setActiveTab,
       answerQuestion,
+      loadDailyPracticeSet,
       reset,
     }),
     [
@@ -143,10 +195,13 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       levels,
       activeTab,
       answers,
+      dailyQuestions,
+      isQuestionsLoading,
       progress,
       setProfile,
       setLevel,
       answerQuestion,
+      loadDailyPracticeSet,
       reset,
     ],
   );

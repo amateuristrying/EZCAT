@@ -42,4 +42,5 @@ export interface IQuestionRepository {
   getDailyPracticeSet(counts: DailySetCounts): Promise<Question[]>;
   getQuestionsBySection(section: SectionType, limit?: number): Promise<Question[]>;
   getMockExam(year: number, slot: number): Promise<MockExamResult>;
+  getTITAQuestion(section?: SectionType): Promise<Question | null>;
 }

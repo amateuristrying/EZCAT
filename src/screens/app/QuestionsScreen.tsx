@@ -5,12 +5,15 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { Colors } from '../../constants/colors';
 import { FontFamily } from '../../constants/typography';
 import { Card, IconBadge } from '../../components/AppUI';
 import { useAppStore } from '../../store/AppStore';
-import { SAMPLE_QUESTIONS, type SectionId } from '../../constants/data';
+import { type SectionId } from '../../constants/data';
+import { checkMCQCorrect, checkTITACorrect, UIQuestion } from '../../data/adapter';
 
 // ─── Section tab meta ────────────────────────────────────────────────────────
 
@@ -24,7 +27,15 @@ const SECTION_LABEL: Record<SectionId, string> = { qa: 'QA', dilr: 'DILR', varc:
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 export default function QuestionsScreen() {
-  const { answers, answerQuestion, progress, setActiveTab } = useAppStore();
+  const {
+    answers,
+    answerQuestion,
+    progress,
+    setActiveTab,
+    dailyQuestions,
+    isQuestionsLoading,
+    loadDailyPracticeSet,
+  } = useAppStore();
 
   const [activeSection, setActiveSection] = useState<SectionId>('qa');
   const [indexBySection, setIndexBySection] = useState<Record<SectionId, number>>({
@@ -37,9 +48,21 @@ export default function QuestionsScreen() {
   const [hintShown, setHintShown] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const sectionQuestions = SAMPLE_QUESTIONS.filter((q) => q.section === activeSection);
+  // Automatically trigger loading daily practice set from repository on mount
+  useEffect(() => {
+    if (dailyQuestions.length === 0 && !isQuestionsLoading) {
+      loadDailyPracticeSet();
+    }
+  }, [dailyQuestions.length, isQuestionsLoading, loadDailyPracticeSet]);
+
+  const sectionQuestions: UIQuestion[] = dailyQuestions.filter(
+    (q) => q.section === activeSection
+  );
+
   const rawIdx = indexBySection[activeSection] || 0;
-  const currentIndex = Math.max(0, Math.min(rawIdx, sectionQuestions.length - 1));
+  const currentIndex = sectionQuestions.length > 0
+    ? Math.max(0, Math.min(rawIdx, sectionQuestions.length - 1))
+    : 0;
   const q = sectionQuestions[currentIndex];
 
   // Sync selection/reveal state whenever the current question changes.
@@ -52,14 +75,15 @@ export default function QuestionsScreen() {
     setNotice(null);
   }, [q?.id, answers]);
 
-  const selectOption = (key: string) => {
+  const selectOption = (val: string) => {
     if (revealed) return;
-    setPending(key);
+    setPending(val);
   };
 
   const handlePrimary = () => {
+    if (!q) return;
     if (!revealed) {
-      if (pending == null) return;
+      if (pending == null || pending.trim() === '') return;
       answerQuestion(q.id, pending);
       setRevealed(true);
     } else {
@@ -71,8 +95,38 @@ export default function QuestionsScreen() {
     }
   };
 
-  const isCorrect = revealed && pending === q.correctKey;
-  const positionPct = ((currentIndex + 1) / sectionQuestions.length) * 100;
+  // Evaluate correctness using adapter functions
+  const isCorrect = revealed && q
+    ? (q.isTITA
+        ? checkTITACorrect(pending || '', q.rawCorrectAnswer)
+        : checkMCQCorrect(pending || '', q.rawCorrectAnswer, q.options))
+    : false;
+
+  const positionPct = sectionQuestions.length > 0
+    ? ((currentIndex + 1) / sectionQuestions.length) * 100
+    : 0;
+
+  // Render loading state if questions are being fetched from repository
+  if (isQuestionsLoading && dailyQuestions.length === 0) {
+    return (
+      <View style={[styles.flex, styles.centerContent]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>Loading Today's Practice Questions...</Text>
+      </View>
+    );
+  }
+
+  // Fallback if no questions are available for the active section
+  if (!q) {
+    return (
+      <View style={[styles.flex, styles.centerContent]}>
+        <Text style={styles.noQuestionsText}>No questions available for {SECTION_LABEL[activeSection]}.</Text>
+        <Pressable style={styles.primaryBtn} onPress={() => loadDailyPracticeSet()}>
+          <Text style={styles.primaryBtnText}>Reload Questions</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <ScrollView
@@ -177,22 +231,52 @@ export default function QuestionsScreen() {
           </View>
         ))}
 
-        {q.options.map((opt) => {
-          const state = optionState(opt.key, pending, revealed, q.correctKey);
-          return (
-            <Pressable
-              key={opt.key}
-              onPress={() => selectOption(opt.key)}
-              style={[styles.option, state.container]}
-            >
-              <View style={[styles.optionCircle, state.circle]}>
-                <Text style={[styles.optionLetter, state.letter]}>{opt.key}</Text>
+        {/* ─── Option rendering: MCQ vs TITA ───────────────────── */}
+        {!q.isTITA ? (
+          /* MCQ Option list */
+          q.options.map((opt) => {
+            const state = optionState(opt.key, pending, revealed, q.correctKey);
+            return (
+              <Pressable
+                key={opt.key}
+                onPress={() => selectOption(opt.key)}
+                style={[styles.option, state.container]}
+              >
+                <View style={[styles.optionCircle, state.circle]}>
+                  <Text style={[styles.optionLetter, state.letter]}>{opt.key}</Text>
+                </View>
+                <Text style={styles.optionText}>{opt.text}</Text>
+                {state.mark ? <Text style={[styles.optionMark, state.letter]}>{state.mark}</Text> : null}
+              </Pressable>
+            );
+          })
+        ) : (
+          /* TITA Input Component */
+          <View style={styles.titaContainer}>
+            <View style={styles.titaBadgeRow}>
+              <View style={styles.titaBadge}>
+                <Text style={styles.titaBadgeText}>⌨️ Type In The Answer (TITA)</Text>
               </View>
-              <Text style={styles.optionText}>{opt.text}</Text>
-              {state.mark ? <Text style={[styles.optionMark, state.letter]}>{state.mark}</Text> : null}
-            </Pressable>
-          );
-        })}
+              <Text style={styles.titaNotice}>No negative marking</Text>
+            </View>
+            <TextInput
+              style={[
+                styles.titaInput,
+                pending != null && pending.trim() !== '' && !revealed && styles.titaInputActive,
+                revealed && isCorrect && styles.titaInputCorrect,
+                revealed && !isCorrect && styles.titaInputWrong,
+              ]}
+              value={pending || ''}
+              onChangeText={selectOption}
+              placeholder="Type your answer here (e.g. 380)..."
+              placeholderTextColor={Colors.textMuted}
+              editable={!revealed}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="default"
+            />
+          </View>
+        )}
 
         {/* Result banner */}
         {revealed && (
@@ -200,17 +284,18 @@ export default function QuestionsScreen() {
             <Text style={[styles.resultText, { color: isCorrect ? Colors.success : Colors.danger }]}>
               {isCorrect
                 ? '✓ Correct!'
-                : `✗ Incorrect — correct answer is ${q.correctKey}`}
+                : `✗ Incorrect — correct answer is ${q.rawCorrectAnswer || q.correctKey}`}
             </Text>
           </View>
         )}
 
         {/* Hint */}
-        {hintShown && q.hint && (
+        {hintShown && (q.hint || q.explanation) && (
           <View style={styles.hintBox}>
-            <Text style={styles.hintText}>💡 {q.hint}</Text>
+            <Text style={styles.hintText}>💡 {q.hint || q.explanation}</Text>
           </View>
         )}
+
         {/* Notice Banner */}
         {notice && (
           <View style={[styles.result, { backgroundColor: Colors.purpleBg, marginTop: 12 }]}>
@@ -241,10 +326,10 @@ export default function QuestionsScreen() {
       {/* ─── Primary CTA ──────────────────────────────────────── */}
       <Pressable
         onPress={handlePrimary}
-        disabled={!revealed && pending == null}
+        disabled={!revealed && (pending == null || pending.trim() === '')}
         style={({ pressed }) => [
           styles.primaryBtn,
-          !revealed && pending == null && styles.primaryBtnDisabled,
+          !revealed && (pending == null || pending.trim() === '') && styles.primaryBtnDisabled,
           pressed && { opacity: 0.9 },
         ]}
         accessibilityRole="button"
@@ -269,7 +354,7 @@ function optionState(
   correctKey: string,
 ) {
   if (revealed) {
-    if (key === correctKey) {
+    if (key.toUpperCase() === correctKey.toUpperCase()) {
       return {
         container: styles.optionCorrect,
         circle: styles.optionCircleCorrect,
@@ -277,7 +362,7 @@ function optionState(
         mark: '✓',
       };
     }
-    if (key === pending) {
+    if (key.toUpperCase() === (pending || '').toUpperCase()) {
       return {
         container: styles.optionWrong,
         circle: styles.optionCircleWrong,
@@ -287,7 +372,7 @@ function optionState(
     }
     return { container: undefined, circle: undefined, letter: undefined, mark: '' };
   }
-  if (key === pending) {
+  if (key.toUpperCase() === (pending || '').toUpperCase()) {
     return {
       container: styles.optionActive,
       circle: styles.optionCircleActive,
@@ -330,6 +415,9 @@ function Action({ icon, label, badge, onPress }: { icon: string; label: string; 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 8 },
+  centerContent: { justifyContent: 'center', alignItems: 'center', padding: 24 },
+  loadingText: { marginTop: 14, fontSize: 15, fontFamily: FontFamily.semiBold, color: Colors.textSecondary },
+  noQuestionsText: { fontSize: 15, fontFamily: FontFamily.semiBold, color: Colors.textSecondary, marginBottom: 16 },
 
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 24, fontFamily: FontFamily.extraBold, color: Colors.primary, letterSpacing: -0.5 },
@@ -436,6 +524,27 @@ const styles = StyleSheet.create({
   optionLetterWrong: { color: Colors.danger },
   optionText: { flex: 1, fontSize: 14, fontFamily: FontFamily.medium, color: Colors.textBody, lineHeight: 20 },
   optionMark: { fontSize: 16, fontFamily: FontFamily.bold },
+
+  // TITA Styling
+  titaContainer: { marginTop: 16 },
+  titaBadgeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  titaBadge: { backgroundColor: '#EEF2FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  titaBadgeText: { fontSize: 12, fontFamily: FontFamily.bold, color: Colors.primary },
+  titaNotice: { fontSize: 11, fontFamily: FontFamily.medium, color: Colors.textMuted },
+  titaInput: {
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    fontFamily: FontFamily.medium,
+    color: Colors.textBody,
+    backgroundColor: '#FAFAFD',
+  },
+  titaInputActive: { borderColor: Colors.accentBlue, backgroundColor: '#F5F8FF' },
+  titaInputCorrect: { borderColor: Colors.success, backgroundColor: Colors.successBg, color: Colors.success },
+  titaInputWrong: { borderColor: Colors.danger, backgroundColor: Colors.dangerBg, color: Colors.danger },
 
   result: { borderRadius: 12, padding: 12, marginTop: 16 },
   resultCorrect: { backgroundColor: Colors.successBg },
