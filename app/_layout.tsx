@@ -13,6 +13,7 @@ import {
 import { MobileFrame } from '../src/components/MobileFrame';
 import { Colors } from '../src/constants/colors';
 import { AppStoreProvider } from '../src/store/AppStore';
+import { BYOKProvider } from '../src/store/BYOKContext';
 
 /**
  * RootLayout — App entry point.
@@ -44,17 +45,19 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AppStoreProvider>
-        <MobileFrame>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="onboarding/profile" />
-            <Stack.Screen name="onboarding/goals" />
-            <Stack.Screen name="onboarding/colleges" />
-            <Stack.Screen name="onboarding/level" />
-            <Stack.Screen name="onboarding/ready" />
-            <Stack.Screen name="home" />
-          </Stack>
-        </MobileFrame>
+        <BYOKProvider>
+          <MobileFrame>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="onboarding/profile" />
+              <Stack.Screen name="onboarding/goals" />
+              <Stack.Screen name="onboarding/colleges" />
+              <Stack.Screen name="onboarding/level" />
+              <Stack.Screen name="onboarding/ready" />
+              <Stack.Screen name="home" />
+            </Stack>
+          </MobileFrame>
+        </BYOKProvider>
       </AppStoreProvider>
     </SafeAreaProvider>
   );

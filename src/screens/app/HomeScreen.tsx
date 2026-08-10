@@ -14,8 +14,13 @@ import { FontFamily } from '../../constants/typography';
 import { Card, Delta, IconBadge } from '../../components/AppUI';
 import { SemiGauge } from '../../components/Charts';
 import { AccountMenu } from '../../components/AccountMenu';
+import { NotificationDrawer } from '../../components/NotificationDrawer';
 import { useAppStore } from '../../store/AppStore';
 import { catYearLabel, daysLeftForYear, type SectionId } from '../../constants/data';
+import {
+  calculatePredictedPercentile,
+  getWeeklyConsistency,
+} from '../../utils/analyticsEngine';
 
 // ─── Small local pieces ──────────────────────────────────────────────────────
 
@@ -35,12 +40,11 @@ function SectionBadge({ section }: { section: 'varc' | 'qa' | 'dilr' }) {
   );
 }
 
-const WEEK = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
   const { profile, targetYear, percentile, progress, userProgress, setActiveTab, reset, clearAllData } = useAppStore();
 
   const nameParts = profile.name.trim().split(/\s+/).filter(Boolean);
@@ -53,6 +57,11 @@ export default function HomeScreen() {
   const firstName = nameParts[0] || 'Aspirant';
   const daysLeft = daysLeftForYear(targetYear);
   const yearLabel = catYearLabel(targetYear);
+
+  // Analytics Engine calculations
+  const attempts = userProgress.attempts || {};
+  const predPercentile = calculatePredictedPercentile(attempts, percentile);
+  const weeklyConsistency = getWeeklyConsistency(attempts, userProgress.dailyProgress);
 
   // Today's practice sections derived from the question bank + answers.
   const sectionData: { s: SectionId; label: string }[] = [
@@ -69,19 +78,28 @@ export default function HomeScreen() {
 
   const handleLogout = () => {
     setMenuOpen(false);
-    // Log out → reset session data and return to Screen 1 (Welcome).
     reset();
     router.replace('/');
   };
 
   const handleResetData = async () => {
     setMenuOpen(false);
-    // Clear all persisted storage data and return to Welcome screen.
     await clearAllData();
     router.replace('/');
   };
 
   const streakDisplay = userProgress.currentStreak || 1;
+
+  const handleNotificationAction = (type: string) => {
+    setNotifOpen(false);
+    if (type === 'mock') {
+      setActiveTab('mocks');
+    } else if (type === 'coach') {
+      setActiveTab('coach');
+    } else {
+      setActiveTab('questions');
+    }
+  };
 
   return (
     <View style={styles.flex}>
@@ -99,10 +117,15 @@ export default function HomeScreen() {
             accessibilityLabel="EZCAT"
           />
           <View style={styles.headerRight}>
-            <View style={styles.bellWrap}>
+            <Pressable
+              style={styles.bellWrap}
+              onPress={() => setNotifOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Notifications"
+            >
               <Text style={styles.bell}>🔔</Text>
               <View style={styles.bellDot} />
-            </View>
+            </Pressable>
             <Pressable
               style={styles.avatar}
               onPress={() => setMenuOpen((v) => !v)}
@@ -135,12 +158,17 @@ export default function HomeScreen() {
               </View>
             </View>
             <View style={styles.streakDays}>
-              {WEEK.map((d, i) => (
+              {weeklyConsistency.bars.map((bar, i) => (
                 <View key={i} style={styles.dayItem}>
-                  <View style={[styles.dayCircle, i < 6 && styles.dayCircleDone]}>
-                    {i < 6 && <Text style={styles.dayCheck}>✓</Text>}
+                  <View
+                    style={[
+                      styles.dayCircle,
+                      bar.active && styles.dayCircleDone,
+                    ]}
+                  >
+                    {bar.active && <Text style={styles.dayCheck}>✓</Text>}
                   </View>
-                  <Text style={styles.dayLabel}>{d}</Text>
+                  <Text style={styles.dayLabel}>{bar.dayLabel}</Text>
                 </View>
               ))}
             </View>
@@ -232,25 +260,30 @@ export default function HomeScreen() {
             <Text style={styles.cardTitleSm}>Weekly Consistency</Text>
             <View style={styles.consistencyRow}>
               <View style={styles.bars}>
-                {[16, 26, 20, 30, 22, 28, 10].map((h, i) => (
+                {weeklyConsistency.bars.map((bar, i) => (
                   <View key={i} style={styles.barCol}>
                     <View
                       style={[
                         styles.bar,
-                        { height: h, backgroundColor: i === 6 ? Colors.track : Colors.accentBlue },
+                        {
+                          height: bar.height,
+                          backgroundColor: bar.active ? Colors.accentBlue : Colors.track,
+                        },
                       ]}
                     />
-                    <Text style={styles.barLabel}>{WEEK[i]}</Text>
+                    <Text style={styles.barLabel}>{bar.dayLabel}</Text>
                   </View>
                 ))}
               </View>
               <View style={styles.consistencyValue}>
-                <Text style={styles.bigBlue}>5/7</Text>
+                <Text style={styles.bigBlue}>{weeklyConsistency.activeDaysCount}/7</Text>
                 <Text style={styles.smMuted}>Days</Text>
               </View>
             </View>
             <View style={styles.cardFooterDivider} />
-            <Text style={styles.footerLinkGood}>↗ Great consistency!</Text>
+            <Text style={styles.footerLinkGood}>
+              {weeklyConsistency.activeDaysCount >= 4 ? '↗ Great consistency!' : 'Keep practicing daily!'}
+            </Text>
           </Card>
 
           <Card style={styles.col}>
@@ -259,14 +292,21 @@ export default function HomeScreen() {
               <Text style={styles.infoGlyph}>ⓘ</Text>
             </View>
             <View style={styles.gaugeWrap}>
-              <SemiGauge size={130} strokeWidth={11} progress={0.87} progressColor={Colors.accentBlue}>
+              <SemiGauge
+                size={130}
+                strokeWidth={11}
+                progress={predPercentile.progressRatio}
+                progressColor={Colors.accentBlue}
+              >
                 <View style={{ alignItems: 'center', marginTop: 14 }}>
-                  <Text style={styles.gaugeValue}>93.4</Text>
+                  <Text style={styles.gaugeValue}>{predPercentile.formatted}</Text>
                   <Text style={styles.smMuted}>Percentile</Text>
                 </View>
               </SemiGauge>
             </View>
-            <Text style={styles.footerLinkBlue}>Keep practicing to reach 99+</Text>
+            <Pressable onPress={() => setActiveTab('questions')}>
+              <Text style={styles.footerLinkBlue}>Keep practicing to reach 99+</Text>
+            </Pressable>
           </Card>
         </View>
 
@@ -284,7 +324,9 @@ export default function HomeScreen() {
               </View>
             </View>
             <View style={styles.cardFooterDivider} />
-            <Text style={styles.footerLinkBlue}>View Details ›</Text>
+            <Pressable onPress={() => setActiveTab('coach')}>
+              <Text style={styles.footerLinkBlue}>View Details ›</Text>
+            </Pressable>
           </Card>
 
           <Card style={styles.col}>
@@ -299,7 +341,9 @@ export default function HomeScreen() {
               </View>
             </View>
             <View style={styles.cardFooterDivider} />
-            <Text style={styles.footerLinkBlue}>Prepare Now ›</Text>
+            <Pressable onPress={() => setActiveTab('mocks')}>
+              <Text style={styles.footerLinkBlue}>Prepare Now ›</Text>
+            </Pressable>
           </Card>
         </View>
 
@@ -307,7 +351,9 @@ export default function HomeScreen() {
         <Card style={styles.block}>
           <View style={styles.cardHeaderRow}>
             <Text style={styles.cardTitle}>Recent Performance</Text>
-            <Text style={styles.footerLinkBlue}>View All</Text>
+            <Pressable onPress={() => setActiveTab('coach')}>
+              <Text style={styles.footerLinkBlue}>View All ›</Text>
+            </Pressable>
           </View>
           <View style={styles.perfRow}>
             <View style={styles.perfItem}>
@@ -350,6 +396,12 @@ export default function HomeScreen() {
         onLogout={handleLogout}
         onResetData={handleResetData}
       />
+
+      <NotificationDrawer
+        visible={notifOpen}
+        onClose={() => setNotifOpen(false)}
+        onSelectAction={handleNotificationAction}
+      />
     </View>
   );
 }
@@ -373,12 +425,12 @@ const styles = StyleSheet.create({
   },
   logo: { width: 96, height: 40 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  bellWrap: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
-  bell: { fontSize: 20 },
+  bellWrap: { width: 34, height: 34, borderRadius: 17, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' },
+  bell: { fontSize: 18 },
   bellDot: {
     position: 'absolute',
-    top: 0,
-    right: 0,
+    top: 4,
+    right: 4,
     width: 8,
     height: 8,
     borderRadius: 4,
