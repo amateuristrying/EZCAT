@@ -77,7 +77,7 @@ export default function CollegesScreen() {
   const { width } = useWindowDimensions();
   const logoSize = Math.min(width * 0.52, 210);
 
-  const { colleges, setColleges } = useAppStore();
+  const { colleges, setColleges, addCustomCollege } = useAppStore();
   const [selectedColleges, setSelectedColleges] = useState<string[]>(
     colleges.length ? colleges : ['iim_ahmedabad'],
   );
@@ -104,18 +104,13 @@ export default function CollegesScreen() {
     });
   }, []);
 
-  const handleAddCustomCollege = useCallback(() => {
+  const handleAddCustomCollege = useCallback(async () => {
     if (!customName.trim()) return;
-    const customId = `custom_${Date.now()}`;
-    const nameParts = customName.trim().split(' ');
-    const part1 = nameParts[0] || 'Custom';
-    const part2 = nameParts.slice(1).join(' ') || 'College';
-    COLLEGES.push({ id: customId, part1, part2 });
-    COLLEGE_METADATA[customId] = { initials: part1.slice(0, 3).toUpperCase(), color: '#0B2C74' };
-    setSelectedColleges((prev) => [...prev, customId]);
+    const added = await addCustomCollege(customName);
+    setSelectedColleges((prev) => (prev.includes(added.id) ? prev : [...prev, added.id]));
     setCustomName('');
     setCustomModalOpen(false);
-  }, [customName]);
+  }, [customName, addCustomCollege]);
 
   // Filter colleges based on search query
   const filteredColleges = COLLEGES.filter((college) => {

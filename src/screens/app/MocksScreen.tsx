@@ -348,7 +348,7 @@ export default function MocksScreen() {
       </ScrollView>
 
       {/* ─── Full Mock Selector Modal ──────────────────────────── */}
-      <Modal visible={fullSelectorOpen} animationType="slide" transparent transparent={false}>
+      <Modal visible={fullSelectorOpen} animationType="slide" transparent={false}>
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Select Full CAT Mock Paper</Text>

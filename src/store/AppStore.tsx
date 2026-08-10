@@ -3,6 +3,8 @@ import {
   SAMPLE_QUESTIONS,
   DEFAULT_PERCENTILE_INDEX,
   PERCENTILE_STEPS,
+  COLLEGES,
+  COLLEGE_METADATA,
   type SectionId,
 } from '../constants/data';
 import { getDailyPracticeSet, getTITAQuestion } from '../data/questionRepository';
@@ -12,6 +14,7 @@ import {
   UserProgressData,
   INITIAL_PROGRESS_DATA,
   MockAttempt,
+  CustomCollege,
   loadUserProgress,
   saveUserProgress,
   processAttempt,
@@ -65,6 +68,7 @@ interface AppStore {
   setTargetYear: (id: string) => void;
   setPercentile: (p: string) => void;
   setColleges: (ids: string[]) => void;
+  addCustomCollege: (name: string) => Promise<CustomCollege>;
   setLevel: (section: SectionId, level: Level) => void;
   setActiveTab: (tab: TabKey) => void;
   answerQuestion: (questionId: string, optionKeyOrText: string) => void;
@@ -113,6 +117,20 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       const loaded = await loadUserProgress();
       if (isMounted) {
+        // Hydrate saved custom colleges into global COLLEGES list
+        if (Array.isArray(loaded.customColleges)) {
+          for (const c of loaded.customColleges) {
+            if (c && c.id) {
+              if (!COLLEGES.some((col) => col.id === c.id)) {
+                COLLEGES.push(c);
+                COLLEGE_METADATA[c.id] = {
+                  initials: c.part1.slice(0, 3).toUpperCase(),
+                  color: '#0B2C74',
+                };
+              }
+            }
+          }
+        }
         setUserProgress(loaded);
         // Hydrate answers map from stored attempts
         const restoredAnswers: Record<string, string> = {};
@@ -133,6 +151,38 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const setProfile = useCallback((p: Partial<Profile>) => {
     setProfileState((prev) => ({ ...prev, ...p }));
   }, []);
+
+  const addCustomCollege = useCallback(
+    async (customName: string): Promise<CustomCollege> => {
+      const customId = `custom_${Date.now()}`;
+      const nameParts = customName.trim().split(' ');
+      const part1 = nameParts[0] || 'Custom';
+      const part2 = nameParts.slice(1).join(' ') || 'College';
+      const newCollege: CustomCollege = { id: customId, part1, part2 };
+
+      if (!COLLEGES.some((c) => c.id === customId)) {
+        COLLEGES.push(newCollege);
+        COLLEGE_METADATA[customId] = {
+          initials: part1.slice(0, 3).toUpperCase(),
+          color: '#0B2C74',
+        };
+      }
+
+      setUserProgress((prev) => {
+        const exists = (prev.customColleges || []).some((c) => c.id === customId);
+        const updatedColleges = exists
+          ? prev.customColleges
+          : [...(prev.customColleges || []), newCollege];
+        const nextProgress = { ...prev, customColleges: updatedColleges };
+        saveUserProgress(nextProgress);
+        return nextProgress;
+      });
+
+      setColleges((prev) => (prev.includes(customId) ? prev : [...prev, customId]));
+      return newCollege;
+    },
+    []
+  );
 
   const setLevel = useCallback((section: SectionId, level: Level) => {
     setLevels((prev) => ({ ...prev, [section]: level }));
@@ -282,6 +332,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       setTargetYear,
       setPercentile,
       setColleges,
+      addCustomCollege,
       setLevel,
       setActiveTab,
       answerQuestion,
@@ -304,7 +355,12 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       isHydrated,
       progress,
       setProfile,
+      setTargetYear,
+      setPercentile,
+      setColleges,
+      addCustomCollege,
       setLevel,
+      setActiveTab,
       answerQuestion,
       recordAnswerAttempt,
       recordMockAttempt,

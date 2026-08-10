@@ -55,6 +55,12 @@ export interface MockAttempt {
   bySection: Record<'varc' | 'dilr' | 'qa', SectionScoreDetail>;
 }
 
+export interface CustomCollege {
+  id: string;
+  part1: string;
+  part2: string;
+}
+
 export interface UserProgressData {
   version: number;
   currentStreak: number;
@@ -64,6 +70,7 @@ export interface UserProgressData {
   attempts: Record<string, QuestionAttempt>;
   dailyProgress: Record<string, DailyProgressRecord>;
   mockAttempts: MockAttempt[];
+  customColleges: CustomCollege[];
 }
 
 export const INITIAL_PROGRESS_DATA: UserProgressData = {
@@ -75,6 +82,7 @@ export const INITIAL_PROGRESS_DATA: UserProgressData = {
   attempts: {},
   dailyProgress: {},
   mockAttempts: [],
+  customColleges: [],
 };
 
 /**
@@ -134,11 +142,40 @@ export async function loadUserProgress(): Promise<UserProgressData> {
       attempts: parsed.attempts || {},
       dailyProgress: parsed.dailyProgress || {},
       mockAttempts: Array.isArray(parsed.mockAttempts) ? parsed.mockAttempts : [],
+      customColleges: Array.isArray(parsed.customColleges) ? parsed.customColleges : [],
     };
   } catch (err) {
     console.error('[ProgressStorage] Failed to load user progress:', err);
     return { ...INITIAL_PROGRESS_DATA };
   }
+}
+
+/**
+ * Load stored custom colleges from user progress
+ */
+export async function loadCustomColleges(): Promise<CustomCollege[]> {
+  const progress = await loadUserProgress();
+  return progress.customColleges || [];
+}
+
+/**
+ * Helper to save a custom college to user progress
+ */
+export async function saveCustomCollege(
+  prevData: UserProgressData,
+  college: CustomCollege
+): Promise<UserProgressData> {
+  const exists = (prevData.customColleges || []).some((c) => c.id === college.id);
+  const updatedColleges = exists
+    ? prevData.customColleges
+    : [...(prevData.customColleges || []), college];
+
+  const updatedData: UserProgressData = {
+    ...prevData,
+    customColleges: updatedColleges,
+  };
+  await saveUserProgress(updatedData);
+  return updatedData;
 }
 
 /**
