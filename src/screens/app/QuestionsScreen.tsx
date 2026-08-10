@@ -29,7 +29,7 @@ const SECTION_LABEL: Record<SectionId, string> = { qa: 'QA', dilr: 'DILR', varc:
 export default function QuestionsScreen() {
   const {
     answers,
-    answerQuestion,
+    recordAnswerAttempt,
     progress,
     setActiveTab,
     dailyQuestions,
@@ -84,7 +84,12 @@ export default function QuestionsScreen() {
     if (!q) return;
     if (!revealed) {
       if (pending == null || pending.trim() === '') return;
-      answerQuestion(q.id, pending);
+      const correctBool = q.isTITA
+        ? checkTITACorrect(pending, q.rawCorrectAnswer)
+        : checkMCQCorrect(pending, q.rawCorrectAnswer, q.options);
+
+      // Record answer attempt in AppStore & persist to AsyncStorage
+      recordAnswerAttempt(q.id, activeSection, correctBool, pending, q.rawId);
       setRevealed(true);
     } else {
       // Advance to the next question in this section (wraps at the end).

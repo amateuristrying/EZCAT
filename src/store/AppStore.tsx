@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState, useCallback } from 'react';
+import React, { createContext, useContext, useMemo, useState, useCallback, useEffect } from 'react';
 import {
   SAMPLE_QUESTIONS,
   DEFAULT_PERCENTILE_INDEX,
@@ -8,6 +8,16 @@ import {
 import { getDailyPracticeSet, getTITAQuestion } from '../data/questionRepository';
 import { UIQuestion, mapRepoQuestionToUIQuestion } from '../data/adapter';
 import { DailySetCounts } from '../data/types';
+import {
+  UserProgressData,
+  INITIAL_PROGRESS_DATA,
+  MockAttempt,
+  loadUserProgress,
+  saveUserProgress,
+  processAttempt,
+  processMockAttempt,
+  validateAttemptsAgainstDB,
+} from '../storage/progressStorage';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -39,6 +49,10 @@ interface AppStore {
   dailyQuestions: UIQuestion[];
   isQuestionsLoading: boolean;
 
+  // Persisted progress & streak
+  userProgress: UserProgressData;
+  isHydrated: boolean;
+
   // Derived
   progress: {
     total: number;
@@ -54,6 +68,14 @@ interface AppStore {
   setLevel: (section: SectionId, level: Level) => void;
   setActiveTab: (tab: TabKey) => void;
   answerQuestion: (questionId: string, optionKeyOrText: string) => void;
+  recordAnswerAttempt: (
+    questionId: string,
+    section: SectionId,
+    isCorrect: boolean,
+    userAnswer: string,
+    rawId?: number
+  ) => Promise<void>;
+  recordMockAttempt: (mockAttempt: MockAttempt) => Promise<void>;
   loadDailyPracticeSet: (counts?: DailySetCounts) => Promise<UIQuestion[]>;
   reset: () => void;
 }
@@ -82,6 +104,32 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [dailyQuestions, setDailyQuestions] = useState<UIQuestion[]>([]);
   const [isQuestionsLoading, setIsQuestionsLoading] = useState(false);
 
+  const [userProgress, setUserProgress] = useState<UserProgressData>(INITIAL_PROGRESS_DATA);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  // 1. Hydrate user progress from AsyncStorage on mount
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      const loaded = await loadUserProgress();
+      if (isMounted) {
+        setUserProgress(loaded);
+        // Hydrate answers map from stored attempts
+        const restoredAnswers: Record<string, string> = {};
+        for (const [qId, att] of Object.entries(loaded.attempts || {})) {
+          if (att && att.userAnswer != null) {
+            restoredAnswers[qId] = att.userAnswer;
+          }
+        }
+        setAnswers(restoredAnswers);
+        setIsHydrated(true);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const setProfile = useCallback((p: Partial<Profile>) => {
     setProfileState((prev) => ({ ...prev, ...p }));
   }, []);
@@ -94,36 +142,87 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setAnswers((prev) => ({ ...prev, [questionId]: optionKeyOrText }));
   }, []);
 
-  const loadDailyPracticeSet = useCallback(async (counts: DailySetCounts = DEFAULT_DAILY_COUNTS): Promise<UIQuestion[]> => {
-    setIsQuestionsLoading(true);
-    try {
-      const repoQuestions = await getDailyPracticeSet(counts);
-      let mapped = repoQuestions.map(mapRepoQuestionToUIQuestion);
+  // Action to record answer attempt & persist to AsyncStorage with rebuild-safety
+  const recordAnswerAttempt = useCallback(
+    async (
+      questionId: string,
+      section: SectionId,
+      isCorrect: boolean,
+      userAnswer: string,
+      rawId?: number
+    ) => {
+      setAnswers((prev) => ({ ...prev, [questionId]: userAnswer }));
 
-      // Ensure TITA representation in the daily practice set
-      const hasTITA = mapped.some((q) => q.isTITA);
-      if (!hasTITA) {
-        const titaMatch = await getTITAQuestion('QA');
-        if (titaMatch) {
-          const titaUI = mapRepoQuestionToUIQuestion(titaMatch);
-          const firstQAIdx = mapped.findIndex((q) => q.section === 'qa');
-          if (firstQAIdx !== -1) {
-            mapped[firstQAIdx] = titaUI;
-          } else {
-            mapped.unshift(titaUI);
+      setUserProgress((prev) => {
+        const nextProgress = processAttempt(prev, {
+          questionId,
+          rawId,
+          section,
+          isCorrect,
+          userAnswer,
+        });
+        saveUserProgress(nextProgress);
+        return nextProgress;
+      });
+    },
+    []
+  );
+
+  // Action to record completed mock attempt & persist to AsyncStorage
+  const recordMockAttempt = useCallback(async (mockAttempt: MockAttempt) => {
+    setUserProgress((prev) => {
+      const nextProgress = processMockAttempt(prev, mockAttempt);
+      saveUserProgress(nextProgress);
+      return nextProgress;
+    });
+  }, []);
+
+  const loadDailyPracticeSet = useCallback(
+    async (counts: DailySetCounts = DEFAULT_DAILY_COUNTS): Promise<UIQuestion[]> => {
+      setIsQuestionsLoading(true);
+      try {
+        const repoQuestions = await getDailyPracticeSet(counts);
+        let mapped = repoQuestions.map(mapRepoQuestionToUIQuestion);
+
+        // Ensure TITA representation in the daily practice set
+        const hasTITA = mapped.some((q) => q.isTITA);
+        if (!hasTITA) {
+          const titaMatch = await getTITAQuestion('QA');
+          if (titaMatch) {
+            const titaUI = mapRepoQuestionToUIQuestion(titaMatch);
+            const firstQAIdx = mapped.findIndex((q) => q.section === 'qa');
+            if (firstQAIdx !== -1) {
+              mapped[firstQAIdx] = titaUI;
+            } else {
+              mapped.unshift(titaUI);
+            }
           }
         }
-      }
 
-      setDailyQuestions(mapped);
-      setIsQuestionsLoading(false);
-      return mapped;
-    } catch (err) {
-      console.error('Failed to load daily practice set from repository:', err);
-      setIsQuestionsLoading(false);
-      return [];
-    }
-  }, []);
+        // Rebuild-Safety: Validate stored attempts against the active database IDs
+        const validIdsSet = new Set(mapped.map((q) => q.id));
+        const { validAttempts } = validateAttemptsAgainstDB(userProgress.attempts, validIdsSet);
+
+        // Synchronize in-memory answers map with validated active attempts
+        setAnswers((prev) => {
+          const next = { ...prev };
+          for (const [qId, att] of Object.entries(validAttempts)) {
+            next[qId] = att.userAnswer;
+          }
+          return next;
+        });
+
+        setDailyQuestions(mapped);
+        setIsQuestionsLoading(false);
+        return mapped;
+      } catch (err) {
+        console.error('Failed to load daily practice set from repository:', err);
+        setIsQuestionsLoading(false);
+        return [];
+      }
+    },
+    [userProgress.attempts]
+  );
 
   const reset = useCallback(() => {
     setProfileState(DEFAULT_PROFILE);
@@ -137,7 +236,6 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Derived progress calculated dynamically from loaded dailyQuestions
-  // (falls back to SAMPLE_QUESTIONS if dailyQuestions is empty)
   const progress = useMemo(() => {
     const bySection: Record<SectionId, SectionProgress> = {
       varc: { total: 0, answered: 0 },
@@ -147,9 +245,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     let total = 0;
     let answered = 0;
 
-    const questionsToUse = dailyQuestions.length > 0
-      ? dailyQuestions
-      : SAMPLE_QUESTIONS.map((q) => ({ id: q.id, section: q.section }));
+    const questionsToUse =
+      dailyQuestions.length > 0
+        ? dailyQuestions
+        : SAMPLE_QUESTIONS.map((q) => ({ id: q.id, section: q.section }));
 
     for (const q of questionsToUse) {
       const sec = q.section as SectionId;
@@ -176,6 +275,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       answers,
       dailyQuestions,
       isQuestionsLoading,
+      userProgress,
+      isHydrated,
       progress,
       setProfile,
       setTargetYear,
@@ -184,6 +285,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       setLevel,
       setActiveTab,
       answerQuestion,
+      recordAnswerAttempt,
+      recordMockAttempt,
       loadDailyPracticeSet,
       reset,
     }),
@@ -197,13 +300,17 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       answers,
       dailyQuestions,
       isQuestionsLoading,
+      userProgress,
+      isHydrated,
       progress,
       setProfile,
       setLevel,
       answerQuestion,
+      recordAnswerAttempt,
+      recordMockAttempt,
       loadDailyPracticeSet,
       reset,
-    ],
+    ]
   );
 
   return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>;

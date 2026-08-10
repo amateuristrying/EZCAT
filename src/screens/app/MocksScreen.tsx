@@ -1,256 +1,461 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   Pressable,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { Colors } from '../../constants/colors';
 import { FontFamily } from '../../constants/typography';
 import { Card, IconBadge } from '../../components/AppUI';
-import { SemiGauge } from '../../components/Charts';
+import { useAppStore } from '../../store/AppStore';
+import { getMockExam, getDailyPracticeSet, getQuestionsBySection, Question } from '../../data/questionRepository';
+import { SectionId } from '../../constants/data';
+import { MockAttempt } from '../../storage/progressStorage';
+import { MockSessionModal } from '../../components/MockSessionModal';
+import { MockAnalysisModal } from '../../components/MockAnalysisModal';
 
-// ─── Data ────────────────────────────────────────────────────────────────────
-
-const PERF = [
-  { label: 'Mocks Taken', value: '12', delta: '3', icon: '📄' },
-  { label: 'Best Percentile', value: '97.6', delta: '2.1', icon: '🏆' },
-  { label: 'Avg. Score', value: '78.3%', delta: '5.4%', icon: '🎯' },
-  { label: 'Avg. Accuracy', value: '84%', delta: '6%', icon: '🛡️' },
+// ─── Eligible Full Mocks (Checked empirically against cat_questions.db) ──────
+// Only sittings with complete 3-section coverage (VARC > 0 AND DILR > 0 AND QA > 0)
+const ELIGIBLE_FULL_MOCKS = [
+  { year: 2023, slot: 1, label: 'CAT 2023 Slot 1 Full Mock', total: 68 },
+  { year: 2023, slot: 2, label: 'CAT 2023 Slot 2 Full Mock', total: 69 },
+  { year: 2023, slot: 3, label: 'CAT 2023 Slot 3 Full Mock', total: 69 },
+  { year: 2022, slot: 1, label: 'CAT 2022 Slot 1 Full Mock', total: 76 },
+  { year: 2022, slot: 2, label: 'CAT 2022 Slot 2 Full Mock', total: 65 },
+  { year: 2022, slot: 3, label: 'CAT 2022 Slot 3 Full Mock', total: 70 },
+  { year: 2021, slot: 1, label: 'CAT 2021 Slot 1 Full Mock', total: 71 },
+  { year: 2021, slot: 2, label: 'CAT 2021 Slot 2 Full Mock', total: 71 },
+  { year: 2021, slot: 3, label: 'CAT 2021 Slot 3 Full Mock', total: 71 },
+  { year: 2020, slot: 1, label: 'CAT 2020 Slot 1 Full Mock', total: 71 },
+  { year: 2020, slot: 2, label: 'CAT 2020 Slot 2 Full Mock', total: 68 },
+  { year: 2020, slot: 3, label: 'CAT 2020 Slot 3 Full Mock', total: 77 },
 ];
-
-const UPCOMING = [
-  {
-    name: 'Full CAT Mock #5',
-    when: 'Sunday, 18 May 2025 • 9:00 AM',
-    icon: '📆',
-    iconBg: Colors.purpleBg,
-    pills: [
-      { text: '180 mins', bg: Colors.varcBg, color: Colors.varc },
-      { text: 'All Sections', bg: Colors.purpleBg, color: Colors.purple },
-    ],
-  },
-  {
-    name: 'DILR Sectional Mock',
-    when: 'Wednesday, 21 May 2025 • 6:00 PM',
-    icon: '📆',
-    iconBg: Colors.dilrBg,
-    pills: [
-      { text: '40 mins', bg: Colors.dilrBg, color: Colors.dilr },
-      { text: 'DILR', bg: Colors.dilrBg, color: Colors.dilr },
-    ],
-  },
-  {
-    name: 'Mini Mock #12',
-    when: 'Tomorrow • 8:00 AM',
-    icon: '📆',
-    iconBg: Colors.qaBg,
-    pills: [
-      { text: '15 mins', bg: Colors.qaBg, color: Colors.qa },
-      { text: 'Mixed', bg: Colors.qaBg, color: Colors.qa },
-    ],
-  },
-];
-
-// ─── Screen ──────────────────────────────────────────────────────────────────
 
 export default function MocksScreen() {
-  return (
-    <ScrollView
-      style={styles.flex}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* ─── Header ───────────────────────────────────────────── */}
-      <View style={styles.headerRow}>
-        <View style={styles.flex}>
-          <Text style={styles.title}>Mock Tests</Text>
-          <Text style={styles.subtitle}>Practice like it's CAT day.</Text>
-        </View>
-        <Pressable style={styles.historyBtn} accessibilityRole="button">
-          <Text style={styles.historyIcon}>🗓️</Text>
-          <Text style={styles.historyText}>Mock History</Text>
-        </Pressable>
-      </View>
+  const { userProgress } = useAppStore();
 
-      {/* ─── Performance (dark) ───────────────────────────────── */}
-      <View style={styles.perfCard}>
-        <Text style={styles.perfHeading}>Your Mock Performance</Text>
-        <View style={styles.perfGrid}>
-          {PERF.map((p) => (
-            <View key={p.label} style={styles.perfTile}>
-              <Text style={styles.perfTileLabel}>{p.label}</Text>
-              <Text style={styles.perfTileValue}>{p.value}</Text>
+  // Selector modals state
+  const [fullSelectorOpen, setFullSelectorOpen] = useState(false);
+  const [sectionalSelectorOpen, setSectionalSelectorOpen] = useState(false);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [loadingMock, setLoadingMock] = useState(false);
+
+  // Active mock session state
+  const [activeSession, setActiveSession] = useState<{
+    visible: boolean;
+    type: 'full' | 'sectional' | 'mini';
+    title: string;
+    year?: number | null;
+    slot?: number | null;
+    section?: SectionId | null;
+    questions: Question[];
+    durationMinutes: number;
+  }>({
+    visible: false,
+    type: 'full',
+    title: '',
+    questions: [],
+    durationMinutes: 120,
+  });
+
+  // Analysis modal state
+  const [analysisAttempt, setAnalysisAttempt] = useState<MockAttempt | null>(null);
+
+  // Computed performance from real completed mockAttempts
+  const mockAttempts = userProgress.mockAttempts || [];
+  const totalMocks = mockAttempts.length;
+  const bestScore = totalMocks > 0 ? Math.max(...mockAttempts.map((m) => m.totalScore)) : 0;
+  const avgAccuracy = totalMocks > 0
+    ? Math.round(mockAttempts.reduce((acc, m) => acc + m.accuracyPct, 0) / totalMocks)
+    : 0;
+  const avgScorePct = totalMocks > 0
+    ? Math.round(
+        mockAttempts.reduce((acc, m) => acc + (m.totalScore / (m.maxPossibleScore || 1)) * 100, 0) /
+          totalMocks
+      )
+    : 0;
+
+  // 1. Launch Full CAT Mock
+  const handleStartFullMock = async (year: number, slot: number, title: string) => {
+    setFullSelectorOpen(false);
+    setLoadingMock(true);
+    try {
+      const examData = await getMockExam(year, slot);
+      const allQuestions = [
+        ...examData.sections.VARC,
+        ...examData.sections.DILR,
+        ...examData.sections.QA,
+      ];
+      setActiveSession({
+        visible: true,
+        type: 'full',
+        title,
+        year,
+        slot,
+        questions: allQuestions,
+        durationMinutes: 120,
+      });
+    } catch (err) {
+      console.error('Failed to load Full Mock exam data:', err);
+    } finally {
+      setLoadingMock(false);
+    }
+  };
+
+  // 2. Launch Sectional Mock
+  const handleStartSectionalMock = async (sec: 'VARC' | 'DILR' | 'QA') => {
+    setSectionalSelectorOpen(false);
+    setLoadingMock(true);
+    try {
+      // Pick a random eligible sitting for section practice
+      const randomSitting = ELIGIBLE_FULL_MOCKS[Math.floor(Math.random() * ELIGIBLE_FULL_MOCKS.length)];
+      const examData = await getMockExam(randomSitting.year, randomSitting.slot);
+      const secQuestions = examData.sections[sec];
+      setActiveSession({
+        visible: true,
+        type: 'sectional',
+        title: `${sec} Sectional Mock (CAT ${randomSitting.year})`,
+        year: randomSitting.year,
+        slot: randomSitting.slot,
+        section: sec.toLowerCase() as SectionId,
+        questions: secQuestions,
+        durationMinutes: 40,
+      });
+    } catch (err) {
+      console.error('Failed to load Sectional Mock data:', err);
+    } finally {
+      setLoadingMock(false);
+    }
+  };
+
+  // 3. Launch Mini Mock (15-min speed test, 10 mixed questions)
+  const handleStartMiniMock = async () => {
+    setLoadingMock(true);
+    try {
+      const miniQuestions = await getDailyPracticeSet({ VARC: 3, DILR: 3, QA: 4 });
+      setActiveSession({
+        visible: true,
+        type: 'mini',
+        title: 'Daily Mini Mock (15 Min Speed Test)',
+        questions: miniQuestions,
+        durationMinutes: 15,
+      });
+    } catch (err) {
+      console.error('Failed to load Mini Mock data:', err);
+    } finally {
+      setLoadingMock(false);
+    }
+  };
+
+  return (
+    <View style={styles.flex}>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ─── Header ───────────────────────────────────────────── */}
+        <View style={styles.headerRow}>
+          <View style={styles.flex}>
+            <Text style={styles.title}>Mock Tests</Text>
+            <Text style={styles.subtitle}>Practice like it's CAT day.</Text>
+          </View>
+          <Pressable style={styles.historyBtn} onPress={() => setHistoryModalOpen(true)}>
+            <Text style={styles.historyIcon}>🗓️</Text>
+            <Text style={styles.historyText}>Mock History ({totalMocks})</Text>
+          </Pressable>
+        </View>
+
+        {/* ─── Performance (dark) ───────────────────────────────── */}
+        <View style={styles.perfCard}>
+          <Text style={styles.perfHeading}>Your Mock Performance</Text>
+          <View style={styles.perfGrid}>
+            <View style={styles.perfTile}>
+              <Text style={styles.perfTileLabel}>Mocks Taken</Text>
+              <Text style={styles.perfTileValue}>{totalMocks}</Text>
               <View style={styles.perfTileFooter}>
-                <Text style={styles.perfDelta}>↑ {p.delta}</Text>
-                <Text style={styles.perfTileIcon}>{p.icon}</Text>
+                <Text style={styles.perfTileIcon}>📄</Text>
               </View>
             </View>
-          ))}
+
+            <View style={styles.perfTile}>
+              <Text style={styles.perfTileLabel}>Best Raw Score</Text>
+              <Text style={styles.perfTileValue}>{bestScore}</Text>
+              <View style={styles.perfTileFooter}>
+                <Text style={styles.perfTileIcon}>🏆</Text>
+              </View>
+            </View>
+
+            <View style={styles.perfTile}>
+              <Text style={styles.perfTileLabel}>Avg. Score %</Text>
+              <Text style={styles.perfTileValue}>{avgScorePct}%</Text>
+              <View style={styles.perfTileFooter}>
+                <Text style={styles.perfTileIcon}>🎯</Text>
+              </View>
+            </View>
+
+            <View style={styles.perfTile}>
+              <Text style={styles.perfTileLabel}>Avg. Accuracy</Text>
+              <Text style={styles.perfTileValue}>{avgAccuracy}%</Text>
+              <View style={styles.perfTileFooter}>
+                <Text style={styles.perfTileIcon}>🛡️</Text>
+              </View>
+            </View>
+          </View>
         </View>
-      </View>
 
-      {/* ─── Choose Your Mock ─────────────────────────────────── */}
-      <Text style={styles.sectionHeading}>Choose Your Mock</Text>
-      <View style={styles.mockRow}>
-        {/* Mini Mock */}
-        <Card style={styles.mockCard}>
-          <View style={styles.quickBadge}>
-            <Text style={styles.quickBadgeText}>Quick</Text>
+        {/* Loading Indicator for Mock Data Generation */}
+        {loadingMock && (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="small" color={Colors.primary} />
+            <Text style={styles.loadingBoxText}>Preparing real exam paper from database...</Text>
           </View>
-          <IconBadge bg={Colors.dilrBg} size={54} radius={27}>
-            <Text style={{ fontSize: 24 }}>⏱️</Text>
-          </IconBadge>
-          <Text style={styles.mockName}>Mini Mock</Text>
-          <Text style={styles.mockDesc}>10–20 questions Quick practice, every day.</Text>
-          <View style={[styles.mockCta, { backgroundColor: Colors.dilrBg }]}>
-            <Text style={[styles.mockCtaText, { color: Colors.dilr }]}>Start Mini Mock ›</Text>
-          </View>
-        </Card>
+        )}
 
-        {/* Sectional Mock */}
-        <Card style={styles.mockCard}>
-          <IconBadge bg={Colors.varcBg} size={54} radius={27}>
-            <Text style={{ fontSize: 24 }}>📖</Text>
-          </IconBadge>
-          <Text style={styles.mockName}>Sectional Mock</Text>
-          <Text style={styles.mockDesc}>Practice a single section in-depth.</Text>
-          <View style={styles.sectionalPills}>
-            <SectionalPill text="VARC" bg={Colors.varcBg} color={Colors.varc} />
-            <SectionalPill text="DILR" bg={Colors.dilrBg} color={Colors.dilr} />
-            <SectionalPill text="QA" bg={Colors.qaBg} color={Colors.qa} />
-          </View>
-        </Card>
-
-        {/* Full CAT Mock */}
-        <Card style={styles.mockCard}>
-          <IconBadge bg={Colors.purpleBg} size={54} radius={27}>
-            <Text style={{ fontSize: 24 }}>🏆</Text>
-          </IconBadge>
-          <Text style={styles.mockName}>Full CAT Mock</Text>
-          <Text style={styles.mockDesc}>Simulate the real CAT exam experience.</Text>
-          <View style={[styles.mockCta, { backgroundColor: Colors.purpleBg }]}>
-            <Text style={[styles.mockCtaText, { color: Colors.purple }]}>Start Full Mock ›</Text>
-          </View>
-        </Card>
-      </View>
-
-      {/* ─── Upcoming Mocks ───────────────────────────────────── */}
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionHeading}>Upcoming Mocks</Text>
-        <Text style={styles.viewAll}>View All</Text>
-      </View>
-      <Card style={styles.block}>
-        {UPCOMING.map((u, i) => (
-          <View key={u.name} style={[styles.upcomingRow, i > 0 && styles.upcomingDivider]}>
-            <IconBadge bg={u.iconBg} size={38} radius={12}>
-              <Text style={{ fontSize: 16 }}>{u.icon}</Text>
+        {/* ─── Choose Your Mock ─────────────────────────────────── */}
+        <Text style={styles.sectionHeading}>Choose Your Mock</Text>
+        <View style={styles.mockRow}>
+          {/* Mini Mock */}
+          <Card style={styles.mockCard}>
+            <View style={styles.quickBadge}>
+              <Text style={styles.quickBadgeText}>Quick</Text>
+            </View>
+            <IconBadge bg={Colors.dilrBg} size={54} radius={27}>
+              <Text style={{ fontSize: 24 }}>⏱️</Text>
             </IconBadge>
-            <View style={styles.flex}>
-              <Text style={styles.upcomingName}>{u.name}</Text>
-              <Text style={styles.upcomingWhen}>{u.when}</Text>
-            </View>
-            <View style={styles.upcomingPills}>
-              {u.pills.map((p) => (
-                <View key={p.text} style={[styles.pill, { backgroundColor: p.bg }]}>
-                  <Text style={[styles.pillText, { color: p.color }]}>{p.text}</Text>
-                </View>
-              ))}
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </View>
-        ))}
-      </Card>
+            <Text style={styles.mockName}>Mini Mock</Text>
+            <Text style={styles.mockDesc}>10 Questions | 15 Mins mixed speed test.</Text>
+            <Pressable
+              style={[styles.mockCta, { backgroundColor: Colors.dilrBg }]}
+              onPress={handleStartMiniMock}
+            >
+              <Text style={[styles.mockCtaText, { color: Colors.dilr }]}>Start Mini Mock ›</Text>
+            </Pressable>
+          </Card>
 
-      {/* ─── Recent Mock Analysis ─────────────────────────────── */}
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionHeading}>Recent Mock Analysis</Text>
-        <Text style={styles.viewAll}>View All</Text>
-      </View>
-      <Card style={styles.block}>
-        <View style={styles.analysisTop}>
-          <View style={styles.analysisGauge}>
-            <Text style={styles.analysisName}>Full CAT Mock #4</Text>
-            <Text style={styles.analysisDate}>10 May 2025</Text>
-            <View style={{ alignItems: 'center', marginTop: 8 }}>
-              <SemiGauge size={110} strokeWidth={10} progress={0.87} progressColor={Colors.accentBlue}>
-                <View style={{ alignItems: 'center', marginTop: 10 }}>
-                  <Text style={styles.gaugeValue}>93.4</Text>
-                  <Text style={styles.gaugeUnit}>Percentile</Text>
-                </View>
-              </SemiGauge>
-              <Text style={styles.gaugeDelta}>↑ 3.2</Text>
+          {/* Sectional Mock */}
+          <Card style={styles.mockCard}>
+            <IconBadge bg={Colors.varcBg} size={54} radius={27}>
+              <Text style={{ fontSize: 24 }}>📖</Text>
+            </IconBadge>
+            <Text style={styles.mockName}>Sectional Mock</Text>
+            <Text style={styles.mockDesc}>40 Mins timed single-section test.</Text>
+            <View style={styles.sectionalPills}>
+              <Pressable
+                style={[styles.sectionalPill, { backgroundColor: Colors.varcBg }]}
+                onPress={() => handleStartSectionalMock('VARC')}
+              >
+                <Text style={[styles.sectionalPillText, { color: Colors.varc }]}>VARC</Text>
+                <Text style={[styles.sectionalPillChevron, { color: Colors.varc }]}>›</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.sectionalPill, { backgroundColor: Colors.dilrBg }]}
+                onPress={() => handleStartSectionalMock('DILR')}
+              >
+                <Text style={[styles.sectionalPillText, { color: Colors.dilr }]}>DILR</Text>
+                <Text style={[styles.sectionalPillChevron, { color: Colors.dilr }]}>›</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.sectionalPill, { backgroundColor: Colors.qaBg }]}
+                onPress={() => handleStartSectionalMock('QA')}
+              >
+                <Text style={[styles.sectionalPillText, { color: Colors.qa }]}>QA</Text>
+                <Text style={[styles.sectionalPillChevron, { color: Colors.qa }]}>›</Text>
+              </Pressable>
             </View>
-          </View>
+          </Card>
 
-          <View style={styles.analysisStats}>
-            <View style={styles.statGridRow}>
-              <Stat label="Score" value="85.6%" delta="6.1%" />
-              <Stat label="Accuracy" value="87%" delta="5%" />
-              <Stat label="Attempts" value="66/66" />
-            </View>
-            <View style={{ marginTop: 12 }}>
-              <Text style={styles.statLabel}>Time Taken</Text>
-              <Text style={styles.statValue}>
-                165 mins <Text style={styles.statVs}>vs 180 mins</Text>
+          {/* Full CAT Mock */}
+          <Card style={styles.mockCard}>
+            <IconBadge bg={Colors.purpleBg} size={54} radius={27}>
+              <Text style={{ fontSize: 24 }}>🏆</Text>
+            </IconBadge>
+            <Text style={styles.mockName}>Full CAT Mock</Text>
+            <Text style={styles.mockDesc}>120 Mins complete 3-section exam sitting.</Text>
+            <Pressable
+              style={[styles.mockCta, { backgroundColor: Colors.purpleBg }]}
+              onPress={() => setFullSelectorOpen(true)}
+            >
+              <Text style={[styles.mockCtaText, { color: Colors.purple }]}>Select Paper ›</Text>
+            </Pressable>
+          </Card>
+        </View>
+
+        {/* ─── Mock History Section ─────────────────────────────── */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionHeading}>Recent Completed Mocks</Text>
+          {mockAttempts.length > 0 && (
+            <Pressable onPress={() => setHistoryModalOpen(true)}>
+              <Text style={styles.viewAll}>View History ({mockAttempts.length})</Text>
+            </Pressable>
+          )}
+        </View>
+
+        <Card style={styles.block}>
+          {mockAttempts.length === 0 ? (
+            <View style={styles.emptyHistory}>
+              <Text style={styles.emptyHistoryIcon}>📝</Text>
+              <Text style={styles.emptyHistoryTitle}>No completed mocks yet</Text>
+              <Text style={styles.emptyHistorySub}>
+                Take your first Full, Sectional, or Mini Mock above to track score analytics!
               </Text>
             </View>
-          </View>
-        </View>
+          ) : (
+            mockAttempts.slice(0, 3).map((item, idx) => (
+              <Pressable
+                key={item.id || idx}
+                style={[styles.historyRow, idx > 0 && styles.historyDivider]}
+                onPress={() => setAnalysisAttempt(item)}
+              >
+                <IconBadge
+                  bg={
+                    item.type === 'full'
+                      ? Colors.purpleBg
+                      : item.type === 'sectional'
+                      ? Colors.varcBg
+                      : Colors.dilrBg
+                  }
+                  size={40}
+                  radius={12}
+                >
+                  <Text style={{ fontSize: 18 }}>
+                    {item.type === 'full' ? '🏆' : item.type === 'sectional' ? '📖' : '⏱️'}
+                  </Text>
+                </IconBadge>
 
-        <View style={styles.aiInsightBox}>
-          <Text style={styles.aiInsightTitle}>✦ AI Insight</Text>
-          <Text style={styles.aiInsightText}>
-            Great job! You improved in QA. Focus more on DILR Set 3 & 4.
+                <View style={styles.flex}>
+                  <Text style={styles.historyItemTitle}>{item.title}</Text>
+                  <Text style={styles.historyItemDate}>
+                    {new Date(item.timestamp).toLocaleDateString()} • {item.attemptedCount}/
+                    {item.totalQuestions} Attempted
+                  </Text>
+                </View>
+
+                <View style={styles.historyScoreBox}>
+                  <Text style={styles.historyScoreVal}>{item.totalScore}</Text>
+                  <Text style={styles.historyScoreSub}>{Math.round(item.accuracyPct)}% Acc</Text>
+                </View>
+
+                <Text style={styles.historyChevron}>›</Text>
+              </Pressable>
+            ))
+          )}
+        </Card>
+      </ScrollView>
+
+      {/* ─── Full Mock Selector Modal ──────────────────────────── */}
+      <Modal visible={fullSelectorOpen} animationType="slide" transparent transparent={false}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select Full CAT Mock Paper</Text>
+            <Pressable onPress={() => setFullSelectorOpen(false)} style={styles.closeModalBtn}>
+              <Text style={styles.closeModalText}>✕ Close</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.modalNotice}>
+            Eligible sittings with complete 3-section data (VARC, DILR & QA):
           </Text>
-          <Text style={styles.footerLinkBlue}>View Analysis ›</Text>
-        </View>
-      </Card>
 
-      {/* ─── AI Recommendation ────────────────────────────────── */}
-      <View style={styles.recoCard}>
-        <View style={styles.recoRow}>
-          <View style={styles.flex}>
-            <Text style={styles.recoTitle}>💡 AI Recommendation</Text>
-            <Text style={styles.recoText}>
-              Your DILR accuracy drops in Set 3 & 4. Practice more Caselets and Arrangement sets to
-              improve your consistency.
-            </Text>
+          <ScrollView contentContainerStyle={styles.selectorList}>
+            {ELIGIBLE_FULL_MOCKS.map((paper) => (
+              <Card key={`${paper.year}_${paper.slot}`} style={styles.paperCard}>
+                <View style={styles.paperRow}>
+                  <IconBadge bg={Colors.purpleBg} size={44} radius={14}>
+                    <Text style={{ fontSize: 20 }}>🎓</Text>
+                  </IconBadge>
+                  <View style={styles.flex}>
+                    <Text style={styles.paperTitle}>{paper.label}</Text>
+                    <Text style={styles.paperSub}>{paper.total} Questions • 120 Mins</Text>
+                  </View>
+                  <Pressable
+                    style={styles.startPaperBtn}
+                    onPress={() => handleStartFullMock(paper.year, paper.slot, paper.label)}
+                  >
+                    <Text style={styles.startPaperText}>Start ›</Text>
+                  </Pressable>
+                </View>
+              </Card>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ─── Full Mock History Modal ───────────────────────────── */}
+      <Modal visible={historyModalOpen} animationType="slide" transparent={false}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Complete Mock History</Text>
+            <Pressable onPress={() => setHistoryModalOpen(false)} style={styles.closeModalBtn}>
+              <Text style={styles.closeModalText}>✕ Close</Text>
+            </Pressable>
           </View>
+
+          <ScrollView contentContainerStyle={styles.selectorList}>
+            {mockAttempts.length === 0 ? (
+              <Text style={styles.noHistoryText}>No mock attempts recorded yet.</Text>
+            ) : (
+              mockAttempts.map((item) => (
+                <Card key={item.id} style={styles.paperCard}>
+                  <Pressable
+                    style={styles.historyModalRow}
+                    onPress={() => {
+                      setHistoryModalOpen(false);
+                      setAnalysisAttempt(item);
+                    }}
+                  >
+                    <View style={styles.flex}>
+                      <Text style={styles.paperTitle}>{item.title}</Text>
+                      <Text style={styles.paperSub}>
+                        {new Date(item.timestamp).toLocaleString()} • {item.attemptedCount}/
+                        {item.totalQuestions} Attempted
+                      </Text>
+                    </View>
+
+                    <View style={styles.historyModalRight}>
+                      <Text style={styles.historyScoreVal}>
+                        {item.totalScore} <Text style={styles.smMuted}>/ {item.maxPossibleScore}</Text>
+                      </Text>
+                      <Text style={styles.historyAccText}>{Math.round(item.accuracyPct)}% Accuracy</Text>
+                    </View>
+                  </Pressable>
+                </Card>
+              ))
+            )}
+          </ScrollView>
         </View>
-        <Pressable style={styles.recoBtn} accessibilityRole="button">
-          <Text style={styles.recoBtnText}>View Plan ›</Text>
-        </Pressable>
-      </View>
+      </Modal>
 
-      <View style={{ height: 12 }} />
-    </ScrollView>
-  );
-}
+      {/* Active Mock Session Modal */}
+      <MockSessionModal
+        visible={activeSession.visible}
+        mockType={activeSession.type}
+        title={activeSession.title}
+        year={activeSession.year}
+        slot={activeSession.slot}
+        section={activeSession.section}
+        questions={activeSession.questions}
+        durationMinutes={activeSession.durationMinutes}
+        onClose={() => setActiveSession((prev) => ({ ...prev, visible: false }))}
+        onComplete={(attempt) => {
+          setActiveSession((prev) => ({ ...prev, visible: false }));
+          setAnalysisAttempt(attempt);
+        }}
+      />
 
-// ─── Pieces ──────────────────────────────────────────────────────────────────
-
-function SectionalPill({ text, bg, color }: { text: string; bg: string; color: string }) {
-  return (
-    <View style={[styles.sectionalPill, { backgroundColor: bg }]}>
-      <Text style={[styles.sectionalPillText, { color }]}>{text}</Text>
-      <Text style={[styles.sectionalPillChevron, { color }]}>›</Text>
+      {/* Mock Analysis Modal */}
+      <MockAnalysisModal
+        visible={analysisAttempt != null}
+        attempt={analysisAttempt}
+        onClose={() => setAnalysisAttempt(null)}
+      />
     </View>
   );
 }
-
-function Stat({ label, value, delta }: { label: string; value: string; delta?: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-      {delta && <Text style={styles.statDelta}>↑ {delta}</Text>}
-    </View>
-  );
-}
-
-// ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
@@ -273,23 +478,31 @@ const styles = StyleSheet.create({
   historyIcon: { fontSize: 14 },
   historyText: { fontSize: 13, fontFamily: FontFamily.semiBold, color: Colors.primary },
 
-  // Performance dark card
-  perfCard: { backgroundColor: Colors.primary, borderRadius: 20, padding: 16, marginBottom: 20 },
+  perfCard: { backgroundColor: Colors.primary, borderRadius: 20, padding: 16, marginBottom: 16 },
   perfHeading: { color: '#FFFFFF', fontSize: 15, fontFamily: FontFamily.bold, marginBottom: 14 },
   perfGrid: { flexDirection: 'row', gap: 8 },
   perfTile: { flex: 1, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 10 },
   perfTileLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 10, fontFamily: FontFamily.medium },
   perfTileValue: { color: '#FFFFFF', fontSize: 18, fontFamily: FontFamily.extraBold, marginTop: 4 },
-  perfTileFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
-  perfDelta: { color: '#4ADE80', fontSize: 10, fontFamily: FontFamily.semiBold },
+  perfTileFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 },
   perfTileIcon: { fontSize: 12 },
+
+  loadingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.varcBg,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  loadingBoxText: { fontSize: 13, fontFamily: FontFamily.semiBold, color: Colors.primary },
 
   sectionHeading: { fontSize: 17, fontFamily: FontFamily.bold, color: Colors.primary, marginBottom: 12 },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   viewAll: { fontSize: 13, fontFamily: FontFamily.semiBold, color: Colors.accentBlue },
   block: { marginBottom: 20 },
 
-  // Mock choice cards
   mockRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
   mockCard: { flex: 1, alignItems: 'center', paddingHorizontal: 10, paddingVertical: 16 },
   quickBadge: {
@@ -311,51 +524,37 @@ const styles = StyleSheet.create({
   sectionalPillText: { fontSize: 11, fontFamily: FontFamily.bold },
   sectionalPillChevron: { fontSize: 14, fontFamily: FontFamily.bold },
 
-  // Upcoming
-  upcomingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
-  upcomingDivider: { borderTopWidth: 1, borderTopColor: '#EFF1F6' },
-  upcomingName: { fontSize: 14, fontFamily: FontFamily.bold, color: Colors.textBody },
-  upcomingWhen: { fontSize: 11, fontFamily: FontFamily.regular, color: Colors.textSecondary, marginTop: 2 },
-  upcomingPills: { alignItems: 'flex-end', gap: 4 },
-  pill: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
-  pillText: { fontSize: 10, fontFamily: FontFamily.semiBold },
-  chevron: { fontSize: 20, color: Colors.textMuted, marginLeft: 2 },
+  emptyHistory: { alignItems: 'center', paddingVertical: 24 },
+  emptyHistoryIcon: { fontSize: 32 },
+  emptyHistoryTitle: { fontSize: 15, fontFamily: FontFamily.bold, color: Colors.primary, marginTop: 8 },
+  emptyHistorySub: { fontSize: 12, fontFamily: FontFamily.regular, color: Colors.textSecondary, textAlign: 'center', marginTop: 4, paddingHorizontal: 20 },
 
-  // Analysis
-  analysisTop: { flexDirection: 'row', gap: 12 },
-  analysisGauge: { alignItems: 'center' },
-  analysisName: { fontSize: 13, fontFamily: FontFamily.bold, color: Colors.textBody },
-  analysisDate: { fontSize: 11, fontFamily: FontFamily.regular, color: Colors.textSecondary, marginTop: 1 },
-  gaugeValue: { fontSize: 20, fontFamily: FontFamily.extraBold, color: Colors.primary },
-  gaugeUnit: { fontSize: 10, fontFamily: FontFamily.regular, color: Colors.textMuted },
-  gaugeDelta: { fontSize: 11, fontFamily: FontFamily.semiBold, color: Colors.success, marginTop: 4 },
-  analysisStats: { flex: 1, justifyContent: 'center' },
-  statGridRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  stat: { flex: 1 },
-  statLabel: { fontSize: 11, fontFamily: FontFamily.regular, color: Colors.textSecondary },
-  statValue: { fontSize: 15, fontFamily: FontFamily.extraBold, color: Colors.primary, marginTop: 2 },
-  statVs: { fontSize: 11, fontFamily: FontFamily.regular, color: Colors.textMuted },
-  statDelta: { fontSize: 10, fontFamily: FontFamily.semiBold, color: Colors.success, marginTop: 1 },
+  historyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  historyDivider: { borderTopWidth: 1, borderTopColor: Colors.border },
+  historyItemTitle: { fontSize: 14, fontFamily: FontFamily.bold, color: Colors.primary },
+  historyItemDate: { fontSize: 11, fontFamily: FontFamily.regular, color: Colors.textSecondary, marginTop: 2 },
+  historyScoreBox: { alignItems: 'flex-end' },
+  historyScoreVal: { fontSize: 16, fontFamily: FontFamily.extraBold, color: Colors.primary },
+  historyScoreSub: { fontSize: 10, fontFamily: FontFamily.semiBold, color: Colors.accentBlue },
+  historyChevron: { fontSize: 18, color: Colors.textMuted },
 
-  aiInsightBox: { backgroundColor: '#F1F5FE', borderRadius: 14, padding: 14, marginTop: 16 },
-  aiInsightTitle: { fontSize: 13, fontFamily: FontFamily.bold, color: Colors.accentBlue },
-  aiInsightText: { fontSize: 12.5, fontFamily: FontFamily.regular, color: Colors.textBody, lineHeight: 18, marginTop: 6, marginBottom: 8 },
-  footerLinkBlue: { fontSize: 13, fontFamily: FontFamily.semiBold, color: Colors.accentBlue },
+  modalContainer: { flex: 1, backgroundColor: Colors.background, padding: 18 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  modalTitle: { fontSize: 18, fontFamily: FontFamily.extraBold, color: Colors.primary },
+  closeModalBtn: { padding: 6 },
+  closeModalText: { fontSize: 14, fontFamily: FontFamily.bold, color: Colors.primary },
+  modalNotice: { fontSize: 12, fontFamily: FontFamily.regular, color: Colors.textSecondary, marginBottom: 14 },
+  selectorList: { gap: 10, paddingBottom: 20 },
+  paperCard: { padding: 14 },
+  paperRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  paperTitle: { fontSize: 14, fontFamily: FontFamily.bold, color: Colors.primary },
+  paperSub: { fontSize: 11, fontFamily: FontFamily.regular, color: Colors.textSecondary, marginTop: 2 },
+  startPaperBtn: { backgroundColor: Colors.purpleBg, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
+  startPaperText: { fontSize: 12, fontFamily: FontFamily.bold, color: Colors.purple },
 
-  // Recommendation
-  recoCard: { backgroundColor: '#EFF3FE', borderRadius: 18, padding: 16 },
-  recoRow: { flexDirection: 'row' },
-  recoTitle: { fontSize: 14, fontFamily: FontFamily.bold, color: Colors.primary },
-  recoText: { fontSize: 12.5, fontFamily: FontFamily.regular, color: Colors.textBody, lineHeight: 18, marginTop: 6 },
-  recoBtn: {
-    backgroundColor: Colors.background,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    alignSelf: 'flex-start',
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  recoBtnText: { fontSize: 13, fontFamily: FontFamily.semiBold, color: Colors.primary },
+  historyModalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  historyModalRight: { alignItems: 'flex-end' },
+  smMuted: { fontSize: 12, fontFamily: FontFamily.regular, color: Colors.textMuted },
+  historyAccText: { fontSize: 11, fontFamily: FontFamily.semiBold, color: Colors.accentBlue },
+  noHistoryText: { textAlign: 'center', color: Colors.textMuted, fontSize: 14, marginTop: 40 },
 });
