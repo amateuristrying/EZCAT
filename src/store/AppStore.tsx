@@ -17,8 +17,10 @@ import {
   CustomCollege,
   loadUserProgress,
   saveUserProgress,
+  clearUserProgress,
   processAttempt,
   processMockAttempt,
+  toggleBookmarkStorage,
   validateAttemptsAgainstDB,
 } from '../storage/progressStorage';
 
@@ -80,8 +82,10 @@ interface AppStore {
     rawId?: number
   ) => Promise<void>;
   recordMockAttempt: (mockAttempt: MockAttempt) => Promise<void>;
+  toggleBookmark: (questionId: string) => Promise<void>;
   loadDailyPracticeSet: (counts?: DailySetCounts) => Promise<UIQuestion[]>;
   reset: () => void;
+  clearAllData: () => Promise<void>;
 }
 
 const AppStoreContext = createContext<AppStore | null>(null);
@@ -227,6 +231,24 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // Action to toggle question bookmark & persist to AsyncStorage
+  const toggleBookmark = useCallback(async (questionId: string) => {
+    setUserProgress((prev) => {
+      const currentBookmarks = prev.bookmarkedQuestionIds || [];
+      const exists = currentBookmarks.includes(questionId);
+      const updatedBookmarks = exists
+        ? currentBookmarks.filter((id) => id !== questionId)
+        : [...currentBookmarks, questionId];
+
+      const nextProgress = {
+        ...prev,
+        bookmarkedQuestionIds: updatedBookmarks,
+      };
+      saveUserProgress(nextProgress);
+      return nextProgress;
+    });
+  }, []);
+
   const loadDailyPracticeSet = useCallback(
     async (counts: DailySetCounts = DEFAULT_DAILY_COUNTS): Promise<UIQuestion[]> => {
       setIsQuestionsLoading(true);
@@ -285,6 +307,13 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setDailyQuestions([]);
   }, []);
 
+  const clearAllData = useCallback(async () => {
+    await clearUserProgress();
+    setUserProgress(INITIAL_PROGRESS_DATA);
+    setAnswers({});
+    reset();
+  }, [reset]);
+
   // Derived progress calculated dynamically from loaded dailyQuestions
   const progress = useMemo(() => {
     const bySection: Record<SectionId, SectionProgress> = {
@@ -338,8 +367,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       answerQuestion,
       recordAnswerAttempt,
       recordMockAttempt,
+      toggleBookmark,
       loadDailyPracticeSet,
       reset,
+      clearAllData,
     }),
     [
       profile,
@@ -364,8 +395,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       answerQuestion,
       recordAnswerAttempt,
       recordMockAttempt,
+      toggleBookmark,
       loadDailyPracticeSet,
       reset,
+      clearAllData,
     ]
   );
 

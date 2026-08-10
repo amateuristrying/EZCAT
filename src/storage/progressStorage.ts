@@ -71,6 +71,7 @@ export interface UserProgressData {
   dailyProgress: Record<string, DailyProgressRecord>;
   mockAttempts: MockAttempt[];
   customColleges: CustomCollege[];
+  bookmarkedQuestionIds: string[];
 }
 
 export const INITIAL_PROGRESS_DATA: UserProgressData = {
@@ -83,6 +84,7 @@ export const INITIAL_PROGRESS_DATA: UserProgressData = {
   dailyProgress: {},
   mockAttempts: [],
   customColleges: [],
+  bookmarkedQuestionIds: [],
 };
 
 /**
@@ -143,6 +145,7 @@ export async function loadUserProgress(): Promise<UserProgressData> {
       dailyProgress: parsed.dailyProgress || {},
       mockAttempts: Array.isArray(parsed.mockAttempts) ? parsed.mockAttempts : [],
       customColleges: Array.isArray(parsed.customColleges) ? parsed.customColleges : [],
+      bookmarkedQuestionIds: Array.isArray(parsed.bookmarkedQuestionIds) ? parsed.bookmarkedQuestionIds : [],
     };
   } catch (err) {
     console.error('[ProgressStorage] Failed to load user progress:', err);
@@ -179,6 +182,27 @@ export async function saveCustomCollege(
 }
 
 /**
+ * Helper to toggle a question bookmark in user progress
+ */
+export async function toggleBookmarkStorage(
+  prevData: UserProgressData,
+  questionId: string
+): Promise<UserProgressData> {
+  const currentBookmarks = prevData.bookmarkedQuestionIds || [];
+  const exists = currentBookmarks.includes(questionId);
+  const updatedBookmarks = exists
+    ? currentBookmarks.filter((id) => id !== questionId)
+    : [...currentBookmarks, questionId];
+
+  const updatedData: UserProgressData = {
+    ...prevData,
+    bookmarkedQuestionIds: updatedBookmarks,
+  };
+  await saveUserProgress(updatedData);
+  return updatedData;
+}
+
+/**
  * Save user progress to AsyncStorage
  */
 export async function saveUserProgress(data: UserProgressData): Promise<boolean> {
@@ -188,6 +212,19 @@ export async function saveUserProgress(data: UserProgressData): Promise<boolean>
     return true;
   } catch (err) {
     console.error('[ProgressStorage] Failed to save user progress:', err);
+    return false;
+  }
+}
+
+/**
+ * Clear all user progress from AsyncStorage
+ */
+export async function clearUserProgress(): Promise<boolean> {
+  try {
+    await AsyncStorage.removeItem(PROGRESS_STORAGE_KEY);
+    return true;
+  } catch (err) {
+    console.error('[ProgressStorage] Failed to clear user progress:', err);
     return false;
   }
 }

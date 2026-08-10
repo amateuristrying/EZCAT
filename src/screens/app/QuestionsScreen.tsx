@@ -7,13 +7,16 @@ import {
   Pressable,
   TextInput,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { Colors } from '../../constants/colors';
 import { FontFamily } from '../../constants/typography';
 import { Card, IconBadge } from '../../components/AppUI';
 import { useAppStore } from '../../store/AppStore';
 import { type SectionId } from '../../constants/data';
-import { checkMCQCorrect, checkTITACorrect, UIQuestion } from '../../data/adapter';
+import { checkMCQCorrect, checkTITACorrect, UIQuestion, mapRepoQuestionToUIQuestion } from '../../data/adapter';
+import { getSimilarQuestion, SectionType } from '../../data/questionRepository';
+import { ReportModal } from '../../components/ReportModal';
 
 // ─── Section tab meta ────────────────────────────────────────────────────────
 
@@ -35,6 +38,8 @@ export default function QuestionsScreen() {
     dailyQuestions,
     isQuestionsLoading,
     loadDailyPracticeSet,
+    userProgress,
+    toggleBookmark,
   } = useAppStore();
 
   const [activeSection, setActiveSection] = useState<SectionId>('qa');
@@ -47,6 +52,9 @@ export default function QuestionsScreen() {
   const [revealed, setRevealed] = useState(false);
   const [hintShown, setHintShown] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [isFetchingSimilar, setIsFetchingSimilar] = useState(false);
 
   // Automatically trigger loading daily practice set from repository on mount
   useEffect(() => {
@@ -100,7 +108,38 @@ export default function QuestionsScreen() {
     }
   };
 
-  // Evaluate correctness using adapter functions
+  const isBookmarked = q ? (userProgress.bookmarkedQuestionIds || []).includes(q.id) : false;
+
+  const handleFetchSimilar = async () => {
+    if (!q || isFetchingSimilar) return;
+    setIsFetchingSimilar(true);
+    try {
+      const repoSec = activeSection.toUpperCase() as SectionType;
+      const match = await getSimilarQuestion(repoSec, q.rawId || q.id);
+      if (match) {
+        const uiMatch = mapRepoQuestionToUIQuestion(match);
+        const exists = dailyQuestions.some((item) => item.id === uiMatch.id);
+        if (!exists) {
+          dailyQuestions.push(uiMatch);
+        }
+        const updatedSectionQuestions = dailyQuestions.filter((item) => item.section === activeSection);
+        const targetIndex = updatedSectionQuestions.findIndex((item) => item.id === uiMatch.id);
+        if (targetIndex !== -1) {
+          setIndexBySection((prev) => ({
+            ...prev,
+            [activeSection]: targetIndex,
+          }));
+        }
+        setNotice(`Loaded a similar concept ${SECTION_LABEL[activeSection]} question!`);
+      } else {
+        setNotice(`No additional similar questions available for ${SECTION_LABEL[activeSection]}.`);
+      }
+    } catch (err) {
+      setNotice('Failed to load a similar question.');
+    } finally {
+      setIsFetchingSimilar(false);
+    }
+  };
   const isCorrect = revealed && q
     ? (q.isTITA
         ? checkTITACorrect(pending || '', q.rawCorrectAnswer)
@@ -192,7 +231,12 @@ export default function QuestionsScreen() {
             );
           })}
         </View>
-        <Pressable style={styles.paletteBtn} accessibilityRole="button">
+        <Pressable
+          style={styles.paletteBtn}
+          onPress={() => setPaletteOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Open Question Palette"
+        >
           <Text style={styles.paletteIcon}>▦</Text>
           <Text style={styles.paletteText}>Question{'\n'}Palette</Text>
         </Pressable>
@@ -212,10 +256,17 @@ export default function QuestionsScreen() {
                 <Text style={styles.metaSub}>Est. Time</Text>
               </View>
             </View>
-            <View style={styles.metaItem}>
-              <Text style={styles.metaIcon}>🔖</Text>
-              <Text style={styles.metaSub}>Bookmark</Text>
-            </View>
+            <Pressable
+              style={styles.metaItem}
+              onPress={() => q && toggleBookmark(q.id)}
+              accessibilityRole="button"
+              accessibilityLabel="Bookmark question"
+            >
+              <Text style={styles.metaIcon}>{isBookmarked ? '🔖' : '📑'}</Text>
+              <Text style={[styles.metaSub, isBookmarked && styles.bookmarkedText]}>
+                {isBookmarked ? 'Saved' : 'Bookmark'}
+              </Text>
+            </Pressable>
           </View>
         </View>
         <View style={styles.progressTrack}>
@@ -316,15 +367,12 @@ export default function QuestionsScreen() {
         <Action
           icon="⚠️"
           label="Report"
-          onPress={() => setNotice('Thank you! Question reported for review.')}
+          onPress={() => setReportModalOpen(true)}
         />
         <Action
           icon="↻"
-          label="Similar"
-          onPress={() => {
-            setNotice('Loading a similar concept question...');
-            handlePrimary();
-          }}
+          label={isFetchingSimilar ? 'Loading...' : 'Similar'}
+          onPress={handleFetchSimilar}
         />
       </Card>
 
@@ -346,6 +394,73 @@ export default function QuestionsScreen() {
       </Pressable>
 
       <View style={{ height: 12 }} />
+
+      {/* Report Issue Modal */}
+      <ReportModal
+        visible={reportModalOpen}
+        questionId={q?.id}
+        onClose={() => setReportModalOpen(false)}
+        onSubmit={(category, details) => {
+          setNotice(`Reported issue '${category}'. Thank you for your feedback!`);
+        }}
+      />
+
+      {/* Question Palette Drawer Modal */}
+      <Modal
+        visible={paletteOpen}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setPaletteOpen(false)}
+      >
+        <View style={styles.paletteOverlay}>
+          <View style={styles.paletteContainer}>
+            <View style={styles.paletteHeader}>
+              <Text style={styles.paletteDrawerTitle}>
+                Question Palette — {SECTION_LABEL[activeSection]}
+              </Text>
+              <Pressable onPress={() => setPaletteOpen(false)} style={styles.closePaletteIconBtn}>
+                <Text style={styles.closePaletteIconText}>✕</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.paletteGrid} showsVerticalScrollIndicator={false}>
+              {sectionQuestions.map((item, idx) => {
+                const answered = answers[item.id] != null && answers[item.id] !== '';
+                const isCurrent = idx === currentIndex;
+                const bookmarked = (userProgress.bookmarkedQuestionIds || []).includes(item.id);
+                return (
+                  <Pressable
+                    key={item.id}
+                    onPress={() => {
+                      setIndexBySection((prev) => ({ ...prev, [activeSection]: idx }));
+                      setPaletteOpen(false);
+                    }}
+                    style={[
+                      styles.paletteItem,
+                      answered && styles.paletteItemAnswered,
+                      isCurrent && styles.paletteItemCurrent,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.paletteItemText,
+                        answered && styles.paletteItemTextAnswered,
+                        isCurrent && styles.paletteItemTextCurrent,
+                      ]}
+                    >
+                      {idx + 1} {bookmarked ? '🔖' : ''}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <Pressable style={styles.closePaletteBtn} onPress={() => setPaletteOpen(false)}>
+              <Text style={styles.closePaletteText}>Close Drawer</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -590,4 +705,95 @@ const styles = StyleSheet.create({
   primaryBtnDisabled: { backgroundColor: '#AEB6C7' },
   primaryBtnText: { color: '#FFFFFF', fontSize: 16, fontFamily: FontFamily.semiBold },
   primaryBtnArrow: { color: '#FFFFFF', fontSize: 18 },
+
+  bookmarkedText: { color: Colors.accentBlue, fontFamily: FontFamily.bold },
+  paletteOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(11, 15, 23, 0.6)',
+    justifyContent: 'flex-end',
+  },
+  paletteContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: 380,
+    borderTopWidth: 2,
+    borderTopColor: Colors.primary,
+  },
+  paletteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  paletteDrawerTitle: {
+    fontSize: 15,
+    fontFamily: FontFamily.bold,
+    color: Colors.primary,
+  },
+  closePaletteIconBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: Colors.track,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closePaletteIconText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    fontFamily: FontFamily.bold,
+  },
+  paletteGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingBottom: 10,
+  },
+  paletteItem: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1.2,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  paletteItemAnswered: {
+    backgroundColor: Colors.accentBlue,
+    borderColor: Colors.accentBlue,
+  },
+  paletteItemCurrent: {
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    backgroundColor: '#EEF2FF',
+  },
+  paletteItemText: {
+    fontSize: 13,
+    fontFamily: FontFamily.bold,
+    color: Colors.textBody,
+  },
+  paletteItemTextAnswered: {
+    color: '#FFFFFF',
+  },
+  paletteItemTextCurrent: {
+    color: Colors.primary,
+  },
+  closePaletteBtn: {
+    marginTop: 12,
+    backgroundColor: Colors.primary,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  closePaletteText: {
+    fontSize: 14,
+    fontFamily: FontFamily.bold,
+    color: '#FFFFFF',
+  },
 });

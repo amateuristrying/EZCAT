@@ -137,6 +137,27 @@ export class NativeQuestionRepository implements IQuestionRepository {
     if (rows.length === 0) return null;
     return mapRowToQuestion(rows[0]);
   }
+
+  async getSimilarQuestion(section: SectionType, excludeId?: number | string): Promise<Question | null> {
+    const db = await getDatabase();
+    let rows: any[] = [];
+    const numericExclude = excludeId != null ? Number(excludeId) : null;
+
+    if (numericExclude != null && !isNaN(numericExclude)) {
+      rows = await db.getAllAsync(
+        'SELECT * FROM questions WHERE section = ? AND id != ? ORDER BY RANDOM() LIMIT 1',
+        [section, numericExclude]
+      );
+    } else {
+      rows = await db.getAllAsync(
+        'SELECT * FROM questions WHERE section = ? ORDER BY RANDOM() LIMIT 1',
+        [section]
+      );
+    }
+
+    if (rows.length === 0) return null;
+    return mapRowToQuestion(rows[0]);
+  }
 }
 
 export const nativeQuestionRepository = new NativeQuestionRepository();

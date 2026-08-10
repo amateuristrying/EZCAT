@@ -41,7 +41,7 @@ const WEEK = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export default function HomeScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const { profile, targetYear, percentile, progress, userProgress, setActiveTab, reset } = useAppStore();
+  const { profile, targetYear, percentile, progress, userProgress, setActiveTab, reset, clearAllData } = useAppStore();
 
   const nameParts = profile.name.trim().split(/\s+/).filter(Boolean);
   const initials =
@@ -71,6 +71,13 @@ export default function HomeScreen() {
     setMenuOpen(false);
     // Log out → reset session data and return to Screen 1 (Welcome).
     reset();
+    router.replace('/');
+  };
+
+  const handleResetData = async () => {
+    setMenuOpen(false);
+    // Clear all persisted storage data and return to Welcome screen.
+    await clearAllData();
     router.replace('/');
   };
 
@@ -341,6 +348,7 @@ export default function HomeScreen() {
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         onLogout={handleLogout}
+        onResetData={handleResetData}
       />
     </View>
   );

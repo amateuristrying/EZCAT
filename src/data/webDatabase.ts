@@ -98,6 +98,25 @@ export class WebQuestionRepository implements IQuestionRepository {
     const picked = matching[Math.floor(Math.random() * matching.length)];
     return mapToQuestion(picked);
   }
+
+  async getSimilarQuestion(section: SectionType, excludeId?: number | string): Promise<Question | null> {
+    const numericExclude = excludeId != null ? Number(excludeId) : null;
+    const matching = this.questions.filter((q) => {
+      if (q.section !== section) return false;
+      if (numericExclude != null && (q.id === numericExclude || q.id === excludeId)) return false;
+      return true;
+    });
+
+    if (matching.length === 0) {
+      // Fallback: return any question from section
+      const anyMatching = this.questions.filter((q) => q.section === section);
+      if (anyMatching.length === 0) return null;
+      return mapToQuestion(anyMatching[Math.floor(Math.random() * anyMatching.length)]);
+    }
+
+    const picked = matching[Math.floor(Math.random() * matching.length)];
+    return mapToQuestion(picked);
+  }
 }
 
 export const webQuestionRepository = new WebQuestionRepository();

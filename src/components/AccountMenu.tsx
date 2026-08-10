@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform, Alert } from 'react-native';
 import Svg, { Circle, Path, Rect, Line } from 'react-native-svg';
 import { Colors } from '../constants/colors';
 import { FontFamily } from '../constants/typography';
@@ -41,6 +41,13 @@ function MenuIcon({ name, color }: { name: string; color: string }) {
           <Path d="M9 19 H15 M9.5 19 V16 H14.5 V19" {...p} />
         </Svg>
       );
+    case 'reset':
+      return (
+        <Svg width={22} height={22} viewBox="0 0 24 24">
+          <Path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" {...p} />
+          <Path d="M3 3v5h5" {...p} />
+        </Svg>
+      );
     case 'logout':
       return (
         <Svg width={22} height={22} viewBox="0 0 24 24">
@@ -59,6 +66,7 @@ interface AccountMenuProps {
   open: boolean;
   onClose: () => void;
   onLogout: () => void;
+  onResetData?: () => void;
 }
 
 const ITEMS = [
@@ -67,8 +75,23 @@ const ITEMS = [
   { key: 'trophy', label: 'EZCAT Leaderboard' },
 ];
 
-export function AccountMenu({ open, onClose, onLogout }: AccountMenuProps) {
+export function AccountMenu({ open, onClose, onLogout, onResetData }: AccountMenuProps) {
   if (!open) return null;
+
+  const handleResetPress = () => {
+    const confirmMsg =
+      'Are you sure you want to reset all application data? This will permanently clear all saved progress, attempts, streak, custom colleges, and bookmarks.';
+    if (Platform.OS === 'web') {
+      if (window.confirm(confirmMsg)) {
+        onResetData?.();
+      }
+    } else {
+      Alert.alert('Reset All Application Data', confirmMsg, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Reset Data', style: 'destructive', onPress: () => onResetData?.() },
+      ]);
+    }
+  };
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
@@ -90,6 +113,16 @@ export function AccountMenu({ open, onClose, onLogout }: AccountMenuProps) {
             <Text style={styles.chevron}>›</Text>
           </Pressable>
         ))}
+
+        <Pressable
+          style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
+          onPress={handleResetPress}
+          accessibilityRole="button"
+          accessibilityLabel="Reset All Data"
+        >
+          <MenuIcon name="reset" color={Colors.danger} />
+          <Text style={[styles.label, styles.resetLabel]} numberOfLines={1}>Reset All Data</Text>
+        </Pressable>
 
         <View style={styles.divider} />
 
@@ -145,6 +178,7 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   logoutLabel: { color: Colors.danger },
+  resetLabel: { color: Colors.danger },
   chevron: { fontSize: 18, color: Colors.textMuted, fontFamily: FontFamily.regular },
   divider: { height: 1, backgroundColor: Colors.border, marginVertical: 4, marginHorizontal: 4 },
 });

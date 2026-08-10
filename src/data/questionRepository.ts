@@ -31,6 +31,10 @@ class QuestionRepository implements IQuestionRepository {
   async getTITAQuestion(section?: SectionType): Promise<Question | null> {
     return this.activeRepository.getTITAQuestion(section);
   }
+
+  async getSimilarQuestion(section: SectionType, excludeId?: number | string): Promise<Question | null> {
+    return this.activeRepository.getSimilarQuestion(section, excludeId);
+  }
 }
 
 export const questionRepository = new QuestionRepository();
@@ -40,5 +44,6 @@ export const getDailyPracticeSet = (counts: DailySetCounts) => questionRepositor
 export const getQuestionsBySection = (section: SectionType, limit?: number) => questionRepository.getQuestionsBySection(section, limit);
 export const getMockExam = (year: number, slot: number) => questionRepository.getMockExam(year, slot);
 export const getTITAQuestion = (section?: SectionType) => questionRepository.getTITAQuestion(section);
+export const getSimilarQuestion = (section: SectionType, excludeId?: number | string) => questionRepository.getSimilarQuestion(section, excludeId);
 
 export * from './types';
