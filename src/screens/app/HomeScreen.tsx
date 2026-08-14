@@ -15,6 +15,9 @@ import { Card, Delta, IconBadge } from '../../components/AppUI';
 import { SemiGauge } from '../../components/Charts';
 import { AccountMenu } from '../../components/AccountMenu';
 import { NotificationDrawer } from '../../components/NotificationDrawer';
+import { ProfileModal } from '../../components/ProfileModal';
+import { NewsModal } from '../../components/NewsModal';
+import { LeaderboardModal } from '../../components/LeaderboardModal';
 import { useAppStore } from '../../store/AppStore';
 import { catYearLabel, daysLeftForYear, type SectionId } from '../../constants/data';
 import {
@@ -45,6 +48,9 @@ function SectionBadge({ section }: { section: 'varc' | 'qa' | 'dilr' }) {
 export default function HomeScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [newsOpen, setNewsOpen] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const { profile, targetYear, percentile, progress, userProgress, setActiveTab, reset, clearAllData } = useAppStore();
 
   const nameParts = profile.name.trim().split(/\s+/).filter(Boolean);
@@ -395,12 +401,30 @@ export default function HomeScreen() {
         onClose={() => setMenuOpen(false)}
         onLogout={handleLogout}
         onResetData={handleResetData}
+        onOpenProfile={() => setProfileOpen(true)}
+        onOpenNews={() => setNewsOpen(true)}
+        onOpenLeaderboard={() => setLeaderboardOpen(true)}
       />
 
       <NotificationDrawer
         visible={notifOpen}
         onClose={() => setNotifOpen(false)}
         onSelectAction={handleNotificationAction}
+      />
+
+      <ProfileModal
+        visible={profileOpen}
+        onClose={() => setProfileOpen(false)}
+      />
+
+      <NewsModal
+        visible={newsOpen}
+        onClose={() => setNewsOpen(false)}
+      />
+
+      <LeaderboardModal
+        visible={leaderboardOpen}
+        onClose={() => setLeaderboardOpen(false)}
       />
     </View>
   );

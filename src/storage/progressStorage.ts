@@ -61,6 +61,12 @@ export interface CustomCollege {
   part2: string;
 }
 
+export interface UserProfileInfo {
+  name: string;
+  age: string;
+  gradYear: string;
+}
+
 export interface UserProgressData {
   version: number;
   currentStreak: number;
@@ -72,6 +78,10 @@ export interface UserProgressData {
   mockAttempts: MockAttempt[];
   customColleges: CustomCollege[];
   bookmarkedQuestionIds: string[];
+  profile?: UserProfileInfo;
+  targetYear?: string;
+  percentile?: string;
+  colleges?: string[];
 }
 
 export const INITIAL_PROGRESS_DATA: UserProgressData = {
@@ -146,11 +156,47 @@ export async function loadUserProgress(): Promise<UserProgressData> {
       mockAttempts: Array.isArray(parsed.mockAttempts) ? parsed.mockAttempts : [],
       customColleges: Array.isArray(parsed.customColleges) ? parsed.customColleges : [],
       bookmarkedQuestionIds: Array.isArray(parsed.bookmarkedQuestionIds) ? parsed.bookmarkedQuestionIds : [],
+      profile: parsed.profile || undefined,
+      targetYear: typeof parsed.targetYear === 'string' ? parsed.targetYear : undefined,
+      percentile: typeof parsed.percentile === 'string' ? parsed.percentile : undefined,
+      colleges: Array.isArray(parsed.colleges) ? parsed.colleges : undefined,
     };
   } catch (err) {
     console.error('[ProgressStorage] Failed to load user progress:', err);
     return { ...INITIAL_PROGRESS_DATA };
   }
+}
+
+/**
+ * Helper to update user profile and goals in progress data
+ */
+export async function saveUserProfileAndGoals(
+  prevData: UserProgressData,
+  updates: {
+    profile?: Partial<UserProfileInfo>;
+    targetYear?: string;
+    percentile?: string;
+    colleges?: string[];
+  }
+): Promise<UserProgressData> {
+  const updatedProfile = updates.profile
+    ? {
+        name: updates.profile.name ?? prevData.profile?.name ?? '',
+        age: updates.profile.age ?? prevData.profile?.age ?? '',
+        gradYear: updates.profile.gradYear ?? prevData.profile?.gradYear ?? '',
+      }
+    : prevData.profile;
+
+  const updatedData: UserProgressData = {
+    ...prevData,
+    ...(updatedProfile ? { profile: updatedProfile } : {}),
+    ...(updates.targetYear !== undefined ? { targetYear: updates.targetYear } : {}),
+    ...(updates.percentile !== undefined ? { percentile: updates.percentile } : {}),
+    ...(updates.colleges !== undefined ? { colleges: updates.colleges } : {}),
+  };
+
+  await saveUserProgress(updatedData);
+  return updatedData;
 }
 
 /**

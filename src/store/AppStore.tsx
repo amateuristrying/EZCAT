@@ -69,7 +69,13 @@ interface AppStore {
   setProfile: (p: Partial<Profile>) => void;
   setTargetYear: (id: string) => void;
   setPercentile: (p: string) => void;
-  setColleges: (ids: string[]) => void;
+  setColleges: (ids: string[] | ((prev: string[]) => string[])) => void;
+  updateProfileAndGoals: (updates: {
+    profile?: Partial<Profile>;
+    targetYear?: string;
+    percentile?: string;
+    colleges?: string[];
+  }) => Promise<void>;
   addCustomCollege: (name: string) => Promise<CustomCollege>;
   setLevel: (section: SectionId, level: Level) => void;
   setActiveTab: (tab: TabKey) => void;
@@ -103,9 +109,9 @@ const DEFAULT_DAILY_COUNTS: DailySetCounts = { VARC: 2, DILR: 2, QA: 3 };
 
 export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfileState] = useState<Profile>(DEFAULT_PROFILE);
-  const [targetYear, setTargetYear] = useState(DEFAULT_TARGET_YEAR);
-  const [percentile, setPercentile] = useState(DEFAULT_PERCENTILE);
-  const [colleges, setColleges] = useState<string[]>(DEFAULT_COLLEGES);
+  const [targetYear, setTargetYearState] = useState(DEFAULT_TARGET_YEAR);
+  const [percentile, setPercentileState] = useState(DEFAULT_PERCENTILE);
+  const [colleges, setCollegesState] = useState<string[]>(DEFAULT_COLLEGES);
   const [levels, setLevels] = useState<Record<SectionId, Level | null>>(DEFAULT_LEVELS);
   const [activeTab, setActiveTab] = useState<TabKey>('home');
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -135,6 +141,25 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
             }
           }
         }
+
+        // Hydrate profile and goal selections
+        if (loaded.profile && loaded.profile.name) {
+          setProfileState({
+            name: loaded.profile.name,
+            age: loaded.profile.age || '',
+            gradYear: loaded.profile.gradYear || '',
+          });
+        }
+        if (loaded.targetYear) {
+          setTargetYearState(loaded.targetYear);
+        }
+        if (loaded.percentile) {
+          setPercentileState(loaded.percentile);
+        }
+        if (Array.isArray(loaded.colleges) && loaded.colleges.length > 0) {
+          setCollegesState(loaded.colleges);
+        }
+
         setUserProgress(loaded);
         // Hydrate answers map from stored attempts
         const restoredAnswers: Record<string, string> = {};
@@ -153,8 +178,89 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setProfile = useCallback((p: Partial<Profile>) => {
-    setProfileState((prev) => ({ ...prev, ...p }));
+    setProfileState((prev) => {
+      const next = { ...prev, ...p };
+      setUserProgress((prevProg) => {
+        const nextProg = { ...prevProg, profile: next };
+        saveUserProgress(nextProg);
+        return nextProg;
+      });
+      return next;
+    });
   }, []);
+
+  const setTargetYear = useCallback((id: string) => {
+    setTargetYearState(id);
+    setUserProgress((prevProg) => {
+      const nextProg = { ...prevProg, targetYear: id };
+      saveUserProgress(nextProg);
+      return nextProg;
+    });
+  }, []);
+
+  const setPercentile = useCallback((p: string) => {
+    setPercentileState(p);
+    setUserProgress((prevProg) => {
+      const nextProg = { ...prevProg, percentile: p };
+      saveUserProgress(nextProg);
+      return nextProg;
+    });
+  }, []);
+
+  const setColleges = useCallback((updaterOrIds: string[] | ((prev: string[]) => string[])) => {
+    setCollegesState((prev) => {
+      const next = typeof updaterOrIds === 'function' ? updaterOrIds(prev) : updaterOrIds;
+      setUserProgress((prevProg) => {
+        const nextProg = { ...prevProg, colleges: next };
+        saveUserProgress(nextProg);
+        return nextProg;
+      });
+      return next;
+    });
+  }, []);
+
+  const updateProfileAndGoals = useCallback(
+    async (updates: {
+      profile?: Partial<Profile>;
+      targetYear?: string;
+      percentile?: string;
+      colleges?: string[];
+    }) => {
+      if (updates.profile) {
+        setProfileState((prev) => ({ ...prev, ...updates.profile }));
+      }
+      if (updates.targetYear !== undefined) {
+        setTargetYearState(updates.targetYear);
+      }
+      if (updates.percentile !== undefined) {
+        setPercentileState(updates.percentile);
+      }
+      if (updates.colleges !== undefined) {
+        setCollegesState(updates.colleges);
+      }
+
+      setUserProgress((prev) => {
+        const nextProgress = {
+          ...prev,
+          ...(updates.profile
+            ? {
+                profile: {
+                  name: updates.profile.name ?? prev.profile?.name ?? '',
+                  age: updates.profile.age ?? prev.profile?.age ?? '',
+                  gradYear: updates.profile.gradYear ?? prev.profile?.gradYear ?? '',
+                },
+              }
+            : {}),
+          ...(updates.targetYear !== undefined ? { targetYear: updates.targetYear } : {}),
+          ...(updates.percentile !== undefined ? { percentile: updates.percentile } : {}),
+          ...(updates.colleges !== undefined ? { colleges: updates.colleges } : {}),
+        };
+        saveUserProgress(nextProgress);
+        return nextProgress;
+      });
+    },
+    []
+  );
 
   const addCustomCollege = useCallback(
     async (customName: string): Promise<CustomCollege> => {
@@ -361,6 +467,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       setTargetYear,
       setPercentile,
       setColleges,
+      updateProfileAndGoals,
       addCustomCollege,
       setLevel,
       setActiveTab,
@@ -389,6 +496,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       setTargetYear,
       setPercentile,
       setColleges,
+      updateProfileAndGoals,
       addCustomCollege,
       setLevel,
       setActiveTab,

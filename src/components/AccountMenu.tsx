@@ -67,6 +67,9 @@ interface AccountMenuProps {
   onClose: () => void;
   onLogout: () => void;
   onResetData?: () => void;
+  onOpenProfile?: () => void;
+  onOpenNews?: () => void;
+  onOpenLeaderboard?: () => void;
 }
 
 const ITEMS = [
@@ -75,8 +78,27 @@ const ITEMS = [
   { key: 'trophy', label: 'EZCAT Leaderboard' },
 ];
 
-export function AccountMenu({ open, onClose, onLogout, onResetData }: AccountMenuProps) {
+export function AccountMenu({
+  open,
+  onClose,
+  onLogout,
+  onResetData,
+  onOpenProfile,
+  onOpenNews,
+  onOpenLeaderboard,
+}: AccountMenuProps) {
   if (!open) return null;
+
+  const handleItemPress = (key: string) => {
+    onClose();
+    if (key === 'profile') {
+      onOpenProfile?.();
+    } else if (key === 'news') {
+      onOpenNews?.();
+    } else if (key === 'trophy') {
+      onOpenLeaderboard?.();
+    }
+  };
 
   const handleResetPress = () => {
     const confirmMsg =
@@ -104,7 +126,7 @@ export function AccountMenu({ open, onClose, onLogout, onResetData }: AccountMen
           <Pressable
             key={item.key}
             style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
-            onPress={onClose}
+            onPress={() => handleItemPress(item.key)}
             accessibilityRole="button"
             accessibilityLabel={item.label}
           >
