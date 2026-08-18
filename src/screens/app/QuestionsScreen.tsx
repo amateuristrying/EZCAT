@@ -17,6 +17,7 @@ import { type SectionId } from '../../constants/data';
 import { checkMCQCorrect, checkTITACorrect, UIQuestion, mapRepoQuestionToUIQuestion } from '../../data/adapter';
 import { getSimilarQuestion, SectionType } from '../../data/questionRepository';
 import { ReportModal } from '../../components/ReportModal';
+import { AskAIChatModal } from '../../components/AskAIChatModal';
 
 // ─── Section tab meta ────────────────────────────────────────────────────────
 
@@ -54,6 +55,7 @@ export default function QuestionsScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [askAiModalOpen, setAskAiModalOpen] = useState(false);
   const [isFetchingSimilar, setIsFetchingSimilar] = useState(false);
 
   // Automatically trigger loading daily practice set from repository on mount
@@ -363,7 +365,7 @@ export default function QuestionsScreen() {
       {/* ─── Actions ──────────────────────────────────────────── */}
       <Card style={styles.actionsCard}>
         <Action icon="💡" label="Hint" onPress={() => setHintShown((v) => !v)} />
-        <Action icon="💬" label="Ask AI" onPress={() => setActiveTab('coach')} />
+        <Action icon="💬" label="Ask AI" onPress={() => setAskAiModalOpen(true)} />
         <Action
           icon="⚠️"
           label="Report"
@@ -394,6 +396,13 @@ export default function QuestionsScreen() {
       </Pressable>
 
       <View style={{ height: 12 }} />
+
+      {/* Ask AI Coaching Chat Modal */}
+      <AskAIChatModal
+        visible={askAiModalOpen}
+        question={q}
+        onClose={() => setAskAiModalOpen(false)}
+      />
 
       {/* Report Issue Modal */}
       <ReportModal
