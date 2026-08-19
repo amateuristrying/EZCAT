@@ -14,9 +14,6 @@
       "expo-sqlite",
       "expo-asset"
     ],
-    "splash": {
-      "backgroundColor": "#FFFFFF"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.ninetyninevca.ezcat"
