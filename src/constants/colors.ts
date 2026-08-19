@@ -6,8 +6,8 @@ export const Colors = {
   primary: '#0B2C74',
   /** White screen / card background */
   background: '#FFFFFF',
-  /** Web browser chrome background */
-  webBackground: '#F5F6FA',
+  /** Web browser chrome background (Obsidian Slate) */
+  webBackground: '#0B0F17',
   /** Footer / placeholder / muted text */
   textMuted: '#9AA1AF',
   /** White text on primary buttons / cards */

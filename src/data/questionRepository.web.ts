@@ -1,11 +1,11 @@
 import { IQuestionRepository, Question, SectionType, DailySetCounts, MockExamResult } from './types';
-import { nativeQuestionRepository } from './nativeDatabase';
+import { webQuestionRepository } from './webDatabase';
 
 /**
- * Native Question Repository (iOS / Android)
- * Uses expo-sqlite to query bundled cat_questions.db on native devices.
+ * Web Question Repository
+ * Loads JSON question data in memory without bundling native SQLite binary or wasm dependencies.
  */
-export const questionRepository: IQuestionRepository = nativeQuestionRepository;
+export const questionRepository: IQuestionRepository = webQuestionRepository;
 
 // Helper export functions
 export const getDailyPracticeSet = (counts: DailySetCounts) => questionRepository.getDailyPracticeSet(counts);
